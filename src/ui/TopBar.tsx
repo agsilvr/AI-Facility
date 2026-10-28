@@ -1,3 +1,4 @@
+import { completedCount } from "../core/ledger";
 import type { FacilityState } from "../core/types";
 import { money } from "./format";
 
@@ -11,7 +12,7 @@ interface Props {
 
 export function TopBar({ state, running, speed, onToggleRunning, onSpeed }: Props) {
   const pending = state.approvals.filter((a) => a.status === "pending").length;
-  const done = state.tasks.filter((t) => t.state === "done").length;
+  const done = completedCount(state);
   const working = state.agents.filter((a) => a.status === "working").length;
 
   return (

@@ -24,4 +24,12 @@ describe("DemoSimulation", () => {
       expect(state.spend[wing.id] ?? 0).toBeLessThanOrEqual(wing.budgetMonthly + 1);
     }
   });
+
+  it("stops creating new work while too much is waiting for the owner", () => {
+    const ledger = new Ledger(initialState());
+    const sim = new DemoSimulation(ledger, { rand: () => 0.5 });
+    for (let i = 0; i < 20000; i++) sim.tick(0.1);
+    const open = ledger.getState().tasks.filter((t) => t.wingId === "etsy" && t.state !== "done");
+    expect(open.length).toBeLessThanOrEqual(6);
+  });
 });

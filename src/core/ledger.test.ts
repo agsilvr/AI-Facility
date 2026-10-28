@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dispatch } from "./dispatch";
-import { Ledger } from "./ledger";
+import { completedCount, Ledger } from "./ledger";
 import { initialState } from "./seed";
 
 function setup() {
@@ -109,5 +109,41 @@ describe("Ledger", () => {
     const before = calls;
     ledger.log("x");
     expect(calls).toBe(before);
+  });
+
+  it("returns interrupted work to the queue after a restart", () => {
+    const ledger = setup();
+    const task = ledger.createTask("etsy", "listing", "Earrings");
+    dispatch(ledger);
+    ledger.setAgentPaused("muse", true);
+    const recovered = Ledger.recover(ledger.getState());
+    expect(recovered.tasks.find((t) => t.id === task.id)).toMatchObject({ state: "queued", agentId: null, progress: 0 });
+    expect(recovered.agents.find((a) => a.id === "scout")).toMatchObject({ status: "idle", taskId: null });
+    expect(recovered.agents.find((a) => a.id === "muse")?.status).toBe("paused");
+    expect(recovered.log[0].text).toContain("1 interrupted task returned");
+  });
+
+  it("resets budgets when a new month starts", () => {
+    let t = Date.UTC(2026, 9, 31, 23, 59);
+    const ledger = new Ledger(initialState(), () => t);
+    ledger.getState().spendMonth = "2026-10";
+    const task = ledger.createTask("etsy", "listing", "Poster");
+    dispatch(ledger);
+    ledger.work(task.id, 0.1, 30);
+    expect(ledger.overBudget("etsy")).toBe(true);
+    t = Date.UTC(2026, 10, 1, 0, 1);
+    expect(ledger.overBudget("etsy")).toBe(false);
+    expect(ledger.getState().spendMonth).toBe("2026-11");
+  });
+
+  it("counts every completion but keeps only recent finished tasks in live state", () => {
+    const ledger = setup();
+    for (let i = 0; i < 70; i++) {
+      const task = ledger.createTask("core", "briefing", `Brief ${i}`);
+      runStage(ledger, task.id);
+    }
+    const state = ledger.getState();
+    expect(completedCount(state)).toBe(70);
+    expect(state.tasks.filter((t) => t.state === "done").length).toBe(60);
   });
 });

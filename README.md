@@ -7,19 +7,33 @@ You can watch every agent move between rooms as work moves through each stage. A
 that needs you lights up red, and nothing goes out to customers or the shop without
 your approval.
 
-**Status: Phase 1 (demo mode).** The agents are simulated so you can try the facility
-before any AI model or shop is connected. Nothing costs money.
+**Status: Phase 2 (local server, demo crew).** The facility runs as a background service on
+the Mac mini, keeps its data in a local database, and carries on when the browser is closed.
+The crew is still simulated, so nothing costs money.
 
-## Run it on the Mac mini
+## Install on the Mac mini
 
-Requires Node.js 20 or later.
+Sign in as the Business macOS user, install Node.js 22.13 or newer from https://nodejs.org,
+then from this folder run:
+
+```sh
+./scripts/install-macos.sh
+```
+
+Open http://localhost:8787. The service restarts itself if it stops and picks up where it
+left off. Use `--at-boot` to start it when the Mac starts, before anyone logs in.
+`./scripts/uninstall-macos.sh` removes the service (your data stays).
+
+Data lives in `~/Library/Application Support/AI Facility`, logs in `~/Library/Logs/AI Facility`.
+By default only this Mac can open the facility.
+
+## Develop
 
 ```sh
 npm install
-npm run dev
+npm run dev:server   # facility server on :8787
+npm run dev          # screens with live reload on :5173
 ```
-
-Then open http://localhost:5173.
 
 ## Checks
 
