@@ -7,13 +7,18 @@ import { scanUntrusted } from "../../src/core/safety";
 import type { Flag } from "../../src/core/types";
 
 // Runs one "reader" step: an AI turns untrusted input (a buyer's message, a web
-// page, a competitor listing) into a structured draft. The reader can't act:
+// page, a competitor listing) into a structured draft. A reader is Claude
+// (Claude Code on the owner's subscription) or Qwen (Ollama on this Mac), and
+// either way it can't act:
 //
-// - every built-in and MCP tool is removed (--tools "" and --disallowedTools "*"),
-// - no settings, hooks, plugins, skills or CLAUDE.md are loaded (--safe-mode),
-// - it runs in an empty throwaway folder with a minimal environment,
-// - its answer must match a JSON schema, and is checked again here,
-// - untrusted text is fenced with a random marker the sender can't guess.
+// - Claude: every built-in and MCP tool is removed (--tools "" and
+//   --disallowedTools "*"), no settings, hooks, plugins, skills or CLAUDE.md
+//   are loaded (--safe-mode), and it runs in an empty throwaway folder with a
+//   minimal environment.
+// - Qwen: a single chat request to Ollama on this Mac, with no tools offered
+//   and no history; Ollama is only ever reached on 127.0.0.1.
+// - Both: the answer must match a JSON schema, and is checked again here, and
+//   untrusted text is fenced with a random marker the sender can't guess.
 //
 // Whatever an injected instruction says, the worst outcome is a bad draft,
 // which the safety checks flag and the owner must approve before anything
@@ -29,7 +34,8 @@ export interface ReaderRequest {
   untrusted: string;
   /** JSON Schema the output must match. */
   schema: Record<string, unknown>;
-  model?: string;
+  /** Which model reads it; the router picks (src/core/models.ts). Claude if not set. */
+  model?: ReaderModel;
   timeoutMs?: number;
 }
 
@@ -59,8 +65,13 @@ export interface AuditEntry {
   flags: string[];
 }
 
+/** The models that can read outside text. Image models never do. */
+export type ReaderModel = "claude" | "qwen";
+
 export interface ReaderOptions {
   spawner?: Spawner;
+  /** How to reach Ollama; replaced in tests. */
+  ollama?: OllamaClient;
   /** Called once per run, success or failure. */
   audit?: (entry: AuditEntry) => void;
 }
@@ -96,7 +107,6 @@ export function readerArgs(req: ReaderRequest, systemPromptFile: string): string
     "dontAsk",
     "--system-prompt-file",
     systemPromptFile,
-    ...(req.model ? ["--model", req.model] : []),
   ];
 }
 
@@ -130,7 +140,7 @@ const READER_RULES = [
 ].join("\n");
 
 export async function runReader(req: ReaderRequest, options: ReaderOptions = {}): Promise<ReaderResult> {
-  const result = await read(req, options.spawner ?? defaultSpawner);
+  const result = await read(req, options);
   options.audit?.({
     at: Date.now(),
     purpose: req.purpose,
@@ -149,8 +159,13 @@ function sha256(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-async function read(req: ReaderRequest, spawner: Spawner): Promise<ReaderResult> {
+async function read(req: ReaderRequest, options: ReaderOptions): Promise<ReaderResult> {
   const inputFlags = scanUntrusted(req.untrusted);
+  if (req.model === "qwen") return readWithQwen(req, inputFlags, options.ollama ?? defaultOllama);
+  return readWithClaude(req, inputFlags, options.spawner ?? defaultSpawner);
+}
+
+async function readWithClaude(req: ReaderRequest, inputFlags: Flag[], spawner: Spawner): Promise<ReaderResult> {
   const workDir = mkdtempSync(join(tmpdir(), "facility-reader-"));
   try {
     const promptFile = join(workDir, "system.txt");
@@ -178,6 +193,60 @@ async function read(req: ReaderRequest, spawner: Spawner): Promise<ReaderResult>
     rmSync(workDir, { recursive: true, force: true });
   }
 }
+
+/** Ollama's chat endpoint: one POST, answered with JSON. */
+export type OllamaClient = (
+  path: string,
+  body: unknown,
+  timeoutMs: number,
+) => Promise<{ status: number; json: unknown } | { error: string }>;
+
+/** Ollama only ever on this Mac: a reader's text never leaves it this way. */
+export const OLLAMA_URL = "http://127.0.0.1:11434";
+/** The Qwen model Ollama runs; set FACILITY_QWEN_MODEL to use another tag. */
+export const QWEN_TAG = process.env.FACILITY_QWEN_MODEL || "qwen3.5:9b";
+
+/** The single request a Qwen reader makes: no tools, no history, a forced JSON shape. */
+export function qwenRequest(req: ReaderRequest, fenced: string) {
+  return {
+    model: QWEN_TAG,
+    stream: false,
+    think: false,
+    format: req.schema,
+    options: { temperature: 0.3 },
+    messages: [
+      { role: "system", content: `${READER_RULES}\n\n${req.instructions}` },
+      { role: "user", content: fenced },
+    ],
+  };
+}
+
+async function readWithQwen(req: ReaderRequest, inputFlags: Flag[], ollama: OllamaClient): Promise<ReaderResult> {
+  const answer = await ollama("/api/chat", qwenRequest(req, fenceUntrusted(req.source, req.untrusted)), req.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  if ("error" in answer) return fail(`Can't reach Ollama on this Mac: ${answer.error}`, inputFlags);
+  if (answer.status === 404) return fail(`Qwen (${QWEN_TAG}) isn't downloaded in Ollama yet`, inputFlags);
+  if (answer.status !== 200) return fail(`Ollama answered ${answer.status}`, inputFlags);
+  const content = (answer.json as { message?: { content?: unknown } } | null)?.message?.content;
+  const output = tryParse(content);
+  const problem = validate(output, req.schema);
+  // A local model costs nothing per call.
+  if (problem) return fail(`Output didn't match the expected format: ${problem}`, inputFlags);
+  return { ok: true, output, inputFlags, costUsd: 0 };
+}
+
+const defaultOllama: OllamaClient = async (path, body, timeoutMs) => {
+  try {
+    const res = await fetch(`${OLLAMA_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+};
 
 function fail(error: string, inputFlags: Flag[]): ReaderResult {
   return { ok: false, error, inputFlags, costUsd: 0 };

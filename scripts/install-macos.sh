@@ -82,6 +82,17 @@ else
   launchctl bootstrap "gui/$(id -u)" "$TARGET"
 fi
 
+# Research runs on Qwen in Ollama on this Mac. If Ollama is installed, fetch the
+# model now (one time, about 7 GB) so research works from the first job. Ollama
+# keeps its models in its own folder; the facility never touches them.
+QWEN="${FACILITY_QWEN_MODEL:-qwen3.5:9b}"
+if command -v ollama >/dev/null 2>&1; then
+  echo "Downloading $QWEN for Ollama (one time, about 7 GB)..."
+  ollama pull "$QWEN" || echo "Couldn't download $QWEN yet. Research will wait until it's there; run this installer again later."
+else
+  echo "Ollama isn't installed yet, so research will wait. Install it from https://ollama.com and run this installer again."
+fi
+
 echo "Waiting for the facility to start..."
 for _ in $(seq 1 20); do
   if curl -fs http://localhost:8787/api/health >/dev/null; then
