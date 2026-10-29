@@ -31,8 +31,10 @@ cd "$REPO"
 npm ci --no-audit --no-fund
 npm run build
 
-LOG_DIR="$HOME/Library/Logs/AI Facility"
-DATA_DIR="$HOME/Library/Application Support/AI Facility"
+# Data and logs stay inside the facility folder. The only file written outside
+# it is the service definition macOS needs in ~/Library/LaunchAgents.
+LOG_DIR="$REPO/logs"
+DATA_DIR="$REPO/data"
 mkdir -p "$LOG_DIR" "$DATA_DIR"
 
 plist() {

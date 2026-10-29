@@ -24,8 +24,9 @@ Open http://localhost:8787. The service restarts itself if it stops and picks up
 left off. Use `--at-boot` to start it when the Mac starts, before anyone logs in.
 `./scripts/uninstall-macos.sh` removes the service (your data stays).
 
-Data lives in `~/Library/Application Support/AI Facility`, logs in `~/Library/Logs/AI Facility`.
-By default only this Mac can open the facility.
+Data lives in `data/` and logs in `logs/` inside this folder. The only file written outside
+it is the service definition in `~/Library/LaunchAgents`. By default only this Mac can open
+the facility.
 
 ## Develop
 

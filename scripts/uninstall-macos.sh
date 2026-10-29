@@ -1,6 +1,6 @@
 #!/bin/bash
 # Stops the AI Facility service and removes it from startup. Your data stays in
-# ~/Library/Application Support/AI Facility unless you delete it yourself.
+# the facility folder's data/ directory unless you delete it yourself.
 set -uo pipefail
 LABEL="com.aifacility.server"
 
