@@ -37,7 +37,8 @@ here is enforced by code and covered by tests; the tests are named so they read 
      their environment, no saved session, at most 3 turns, and a JSON schema their answer must
      match. Outside text arrives on standard input, fenced by a random marker, never on the
      command line or in the system prompt. Their answer is checked against the schema again
-     in our code. (`server/agents/reader.ts`)
+     in our code. Qwen readers make one chat request to Ollama at `127.0.0.1` with no tools
+     and no history, the same fence and the same schema check. (`server/agents/reader.ts`)
    - **Actions** (publish a listing, send a reply) are plain code, not AI. They run only on
      content the owner approved, byte for byte, within a day of the approval, and each
      approval is used once. The check runs again at the moment of acting. (`Ledger.mayAct`)

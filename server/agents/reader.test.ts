@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { type AuditEntry, fenceUntrusted, readerArgs, readerEnv, runReader, type Spawner, validate } from "./reader";
+import { type AuditEntry, fenceUntrusted, OLLAMA_URL, type OllamaClient, QWEN_TAG, qwenRequest, readerArgs, readerEnv, runReader, type Spawner, validate } from "./reader";
 
 const SCHEMA = {
   type: "object",
@@ -156,5 +156,76 @@ describe("runReader", () => {
     expect(entries[0].inputSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(entries)).not.toContain("customer list");
     expect(entries[1]).toMatchObject({ ok: false, outputSha256: null });
+  });
+});
+
+function fakeOllama(answer: Awaited<ReturnType<OllamaClient>>) {
+  const calls: { path: string; body: ReturnType<typeof qwenRequest> }[] = [];
+  const ollama: OllamaClient = async (path, body) => {
+    calls.push({ path, body: body as ReturnType<typeof qwenRequest> });
+    return answer;
+  };
+  return { ollama, calls };
+}
+
+const QWEN = { ...REQ, model: "qwen" as const };
+
+describe("Qwen reader", () => {
+  it("only ever talks to Ollama on this Mac", () => {
+    expect(new URL(OLLAMA_URL).hostname).toBe("127.0.0.1");
+  });
+
+  it("makes one chat request with no tools, no history and the required JSON shape", () => {
+    const body = qwenRequest(QWEN, "fenced text");
+    expect(body.model).toBe(QWEN_TAG);
+    expect(body.format).toEqual(SCHEMA);
+    expect(body.stream).toBe(false);
+    expect(Object.keys(body)).not.toContain("tools");
+    expect(body.messages.map((m) => m.role)).toEqual(["system", "user"]);
+    expect(body.messages[0].content).toContain("You have no tools");
+  });
+
+  it("sends the outside text fenced, and only in the user message", async () => {
+    const { ollama, calls } = fakeOllama({ status: 200, json: { message: { content: '{"message":"Thanks!"}' } } });
+    const result = await runReader(QWEN, { ollama });
+    expect(result).toMatchObject({ ok: true, output: { message: "Thanks!" }, costUsd: 0 });
+    expect(calls[0].path).toBe("/api/chat");
+    const [system, user] = calls[0].body.messages;
+    expect(system.content).not.toContain(REQ.untrusted);
+    expect(user.content).toContain(REQ.untrusted);
+    expect(user.content).toMatch(/UNTRUSTED-[0-9a-f]{24}/);
+  });
+
+  it("still flags injection in the input", async () => {
+    const { ollama } = fakeOllama({ status: 200, json: { message: { content: '{"message":"Thanks!"}' } } });
+    expect((await runReader(QWEN, { ollama })).inputFlags.map((f) => f.code)).toContain("possible-injection");
+  });
+
+  it.each([
+    ["Ollama not running", { error: "connect ECONNREFUSED 127.0.0.1:11434" }, "Can't reach Ollama"],
+    ["Qwen not downloaded", { status: 404, json: { error: "model not found" } }, "isn't downloaded"],
+    ["a server error", { status: 500, json: null }, "Ollama answered 500"],
+    ["text that isn't JSON", { status: 200, json: { message: { content: "Sure! Here's a reply" } } }, "expected format"],
+    ["the wrong shape", { status: 200, json: { message: { content: '{"message":"hi","refund":true}' } } }, "not allowed"],
+  ])("fails closed on %s", async (_, answer, problem) => {
+    const result = await runReader(QWEN, { ollama: fakeOllama(answer).ollama });
+    expect(result.ok).toBe(false);
+    expect(result.output).toBeUndefined();
+    expect(result.error).toContain(problem);
+  });
+
+  it("is audited like any other reader", async () => {
+    const entries: AuditEntry[] = [];
+    const { ollama } = fakeOllama({ status: 200, json: { message: { content: '{"message":"Thanks!"}' } } });
+    await runReader(QWEN, { ollama, audit: (e) => entries.push(e) });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ ok: true, costUsd: 0 });
+    expect(JSON.stringify(entries)).not.toContain("customer list");
+  });
+
+  it("never runs Claude Code when Qwen is asked for", async () => {
+    const { spawner, calls } = fakeSpawner({ structured_output: { message: "x" } });
+    await runReader(QWEN, { spawner, ollama: fakeOllama({ status: 200, json: { message: { content: '{"message":"a"}' } } }).ollama });
+    expect(calls).toHaveLength(0);
   });
 });

@@ -57,8 +57,9 @@ Read them before every change and follow them without exception.
 8. **The server only answers this Mac** unless the owner opts in. It checks the Host header
    and refuses cross-origin or non-JSON commands. Keep those checks and their tests.
 9. **Readers never act; actors never read outside text.** Any AI step that reads something from
-   outside (a buyer message, a web page, a review) runs through `server/agents/reader.ts`: no
-   tools, no MCP, no settings or memory, an empty temp folder, a scrubbed environment, the
+   outside (a buyer message, a web page, a review) runs through `server/agents/reader.ts`, on
+   Claude or on Qwen: no tools, no MCP, no settings or memory, an empty temp folder, a
+   scrubbed environment (Claude), one chat request to Ollama on 127.0.0.1 only (Qwen), the
    outside text fenced with a random marker, and output checked against a schema. Actions are
    plain code that use only approved content. Never give a reader a tool.
 10. **Every draft is checked before the owner sees it** (`src/core/safety.ts`): links, emails,
