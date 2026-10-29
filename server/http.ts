@@ -36,7 +36,9 @@ export interface ServerOptions {
  * The facility's local web server: the API the screens use, plus the built
  * screens themselves. It only answers to its own host names (which blocks
  * DNS-rebinding tricks), and only same-origin JSON requests may change
- * anything, so a web page open in another tab can't press buttons in the facility.
+ * anything, so a web page open in another tab can't press buttons in the
+ * facility. Decisions also need the owner's PIN session (see owner.ts), so a
+ * program on this Mac can't press them either.
  */
 export function createFacilityServer(facility: Facility, options: ServerOptions) {
   const { staticDir, allowedHosts } = options;
@@ -67,12 +69,44 @@ async function handle(
   }
   if (req.method === "GET" && path === "/api/events") return streamEvents(facility, req, res);
 
+  if (req.method === "GET" && path === "/api/owner") {
+    const token = sessionCookie(req);
+    return sendJson(res, 200, { pinSet: facility.owner.hasPin(), unlockedUntil: facility.owner.expiresAt(token) });
+  }
+
   if (req.method === "POST" && path.startsWith("/api/")) {
     checkSameOrigin(req);
     const body = await readJson(req);
+    const isOwner = facility.owner.check(sessionCookie(req));
+    // Decisions and restarts are the owner's alone; stopping things never needs a PIN.
+    const ownerOnly = () => {
+      if (!isOwner) throw new HttpError(401, "Enter your PIN first");
+    };
+
+    if (path === "/api/owner/setup" || path === "/api/owner/unlock") {
+      const pin = typeof body.pin === "string" ? body.pin : "";
+      const result =
+        path === "/api/owner/setup"
+          ? facility.owner.setFirstPin(pin, typeof body.code === "string" ? body.code : "")
+          : facility.owner.unlock(pin);
+      if (!result.ok) {
+        if (result.reason === "bad-pin" || result.reason === "locked") facility.ledger.log("Wrong approval PIN entered", "warning");
+        const status = result.reason === "locked" ? 429 : result.reason === "weak-pin" ? 400 : 403;
+        return sendJson(res, status, { error: result.reason, retryAt: result.retryAt ?? null });
+      }
+      res.setHeader("Set-Cookie", cookie(result.token, Math.round((result.expiresAt - Date.now()) / 1000)));
+      return sendJson(res, 200, { ok: true, unlockedUntil: result.expiresAt });
+    }
+
+    if (path === "/api/owner/lock") {
+      facility.owner.lock(sessionCookie(req));
+      res.setHeader("Set-Cookie", cookie("", 0));
+      return sendJson(res, 200, { ok: true });
+    }
 
     const approval = path.match(/^\/api\/approvals\/([^/]+)$/);
     if (approval) {
+      ownerOnly();
       if (typeof body.approve !== "boolean") throw new HttpError(400, "approve must be true or false");
       const id = decodeURIComponent(approval[1]);
       const found = facility.ledger.getState().approvals.find((a) => a.id === id && a.status === "pending");
@@ -86,6 +120,7 @@ async function handle(
     const pause = path.match(/^\/api\/agents\/([^/]+)\/pause$/);
     if (pause) {
       if (typeof body.paused !== "boolean") throw new HttpError(400, "paused must be true or false");
+      if (!body.paused) ownerOnly();
       const id = decodeURIComponent(pause[1]);
       if (!facility.ledger.agent(id)) throw new HttpError(404, "No agent with that id");
       facility.ledger.setAgentPaused(id, body.paused);
@@ -93,6 +128,7 @@ async function handle(
     }
 
     if (path === "/api/control") {
+      if (body.running === true && !facility.getControl().running) ownerOnly();
       facility.setControl({
         running: typeof body.running === "boolean" ? body.running : undefined,
         speed: typeof body.speed === "number" ? body.speed : undefined,
@@ -104,6 +140,21 @@ async function handle(
 
   if (req.method === "GET" && staticDir) return serveStatic(staticDir, path, res);
   throw new HttpError(404, "Not found");
+}
+
+const COOKIE = "facility_owner";
+
+/** The owner's session cookie: unreadable by page scripts, never sent by other sites. */
+function cookie(token: string, maxAgeSeconds: number) {
+  return `${COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${maxAgeSeconds}`;
+}
+
+function sessionCookie(req: IncomingMessage): string | undefined {
+  for (const part of (req.headers.cookie ?? "").split(";")) {
+    const [name, ...value] = part.trim().split("=");
+    if (name === COOKIE) return value.join("=") || undefined;
+  }
+  return undefined;
 }
 
 function hostName(host: string) {

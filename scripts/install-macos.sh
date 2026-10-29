@@ -87,6 +87,12 @@ for _ in $(seq 1 20); do
   if curl -fs http://localhost:8787/api/health >/dev/null; then
     echo "AI Facility is running: http://localhost:8787"
     echo "Logs: $LOG_DIR/server.log"
+    # First install: open the one-time page where the owner sets their approval PIN.
+    SETUP="$DATA_DIR/owner-setup-link.txt"
+    if [[ -f "$SETUP" ]]; then
+      echo "Opening the page to set your approval PIN..."
+      open "$(head -n 1 "$SETUP")"
+    fi
     exit 0
   fi
   sleep 1

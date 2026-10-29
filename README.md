@@ -26,8 +26,12 @@ then from this folder run:
 ./scripts/install-macos.sh
 ```
 
-Open http://localhost:8787. The service restarts itself if it stops and picks up where it
-left off. Use `--at-boot` to start it when the Mac starts, before anyone logs in.
+The installer opens a page where you choose your approval PIN (6 to 12 digits). Only someone
+with the PIN can approve, send back or restart work; pausing never needs it. If you close that
+page before choosing, run the installer again for a fresh one.
+
+After that, open http://localhost:8787. The service restarts itself if it stops and picks up
+where it left off. Use `--at-boot` to start it when the Mac starts, before anyone logs in.
 `./scripts/uninstall-macos.sh` removes the service (your data stays).
 
 Data lives in `data/` and logs in `logs/` inside this folder. The only file written outside

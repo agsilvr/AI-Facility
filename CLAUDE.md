@@ -26,8 +26,10 @@ Read them before every change and follow them without exception.
    workflow stage with an `action`, placed directly after a stage marked `needsApproval`.
    `src/core/policy.ts` enforces this shape and the server refuses to start if any wing breaks
    it. An approval binds to the exact draft the owner saw (`serializeDraft`); if the content
-   changes, the action is blocked and the work goes back for review. Code that performs an
-   action must check `ledger.mayAct(task)` first. Add a test for every new action.
+   changes, the action is blocked and the work goes back for review. Approvals expire after a
+   day and are used once. Code that performs an action must check `ledger.mayAct(task)` first.
+   Add a test for every new action. Approving, sending back and resuming need the owner's PIN
+   session (`server/owner.ts`); never add a way to decide without it.
 2. **Every wing has a hard monthly budget.** Dispatch stops for a wing at its cap. Never
    remove or bypass the check in `dispatch`. AI provider keys must also have a spending cap
    set at the provider.
@@ -93,7 +95,8 @@ Read them before every change and follow them without exception.
 
 ## Layout
 
-- `server/`: local HTTP server, SQLite store (state, history, audit), and the running facility.
+- `server/`: local HTTP server, SQLite store (state, history, audit), the owner's PIN
+  (`owner.ts`), and the running facility.
 - `server/agents/`: the locked-down AI reader.
 - `scripts/`: macOS service install and uninstall.
 - `src/client/`: the browser's connection to the server.
@@ -107,4 +110,5 @@ Read them before every change and follow them without exception.
   shows), `pixels` (palette, font, crew sprites), `rooms/` (one file per kind of room),
   `render` (the dirt, hull and hall, and draws it all) and `FacilityView` (the canvas and its
   controls).
-- `src/ui/`: top bar, sidebar panels (Needs you, Task flow, Crew, Log) and inspector.
+- `src/ui/`: top bar, sidebar panels (Needs you, Task flow, Crew, Log), inspector, and the PIN
+  prompt (`OwnerLock`).

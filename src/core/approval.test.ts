@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dispatch } from "./dispatch";
-import { Ledger } from "./ledger";
+import { APPROVAL_TTL_MS, Ledger } from "./ledger";
 import { initialState } from "./seed";
 import type { Draft } from "./types";
 
@@ -9,9 +9,12 @@ import type { Draft } from "./types";
 
 const GOOD: Draft = { kind: "reply", message: "Thanks! Your order ships tomorrow." };
 
+/** A clock the tests can wind forward. */
+const clock = { t: 1_000 };
+
 function pendingReply(draft: Draft | null = GOOD, inputFlags = [] as never[]) {
-  let t = 1_000;
-  const ledger = new Ledger(initialState(), () => t++);
+  clock.t = 1_000;
+  const ledger = new Ledger(initialState(), () => clock.t++);
   const task = ledger.createTask("etsy", "message", "Shipping question");
   dispatch(ledger);
   ledger.work(task.id, 1, 0);
@@ -108,5 +111,59 @@ describe("approval gate", () => {
     expect(ledger.decide(approvalId, true)).toBe(true);
     expect(ledger.decide(approvalId, false)).toBe(false);
     expect(ledger.decide("no-such-id", true)).toBe(false);
+  });
+});
+
+describe("approvals expire and are used once", () => {
+  /** Approve the reply, then put Echo on the send stage. */
+  function approvedAndSending() {
+    const setup = pendingReply();
+    setup.ledger.decide(setup.approvalId, true);
+    dispatch(setup.ledger);
+    expect(setup.ledger.task(setup.taskId)?.state).toBe("active");
+    return setup;
+  }
+
+  it("won't approve a card that has waited more than a day", () => {
+    const { ledger, taskId, approvalId } = pendingReply();
+    clock.t += APPROVAL_TTL_MS + 1;
+    expect(ledger.isExpired(ledger.getState().approvals[0])).toBe(true);
+    expect(ledger.decide(approvalId, true)).toBe(false);
+    expect(ledger.task(taskId)?.approvedContent).toBeUndefined();
+    // It can still be sent back for a fresh draft.
+    expect(ledger.decide(approvalId, false)).toBe(true);
+  });
+
+  it("lets an approval lapse if the action hasn't happened within a day", () => {
+    const { ledger, taskId, approvalId } = pendingReply();
+    ledger.decide(approvalId, true);
+    expect(ledger.mayAct(ledger.task(taskId)!)).toBe(true);
+    clock.t += APPROVAL_TTL_MS + 1;
+    expect(ledger.mayAct(ledger.task(taskId)!)).toBe(false);
+    dispatch(ledger);
+    expect(ledger.task(taskId)?.state).toBe("queued");
+    expect(ledger.task(taskId)?.stageIndex).toBe(0);
+  });
+
+  it("checks the approval again at the moment of acting, not only when the work starts", () => {
+    const { ledger, taskId } = approvedAndSending();
+    tamper(ledger, taskId, { kind: "reply", message: "Swapped while sending" });
+    ledger.work(taskId, 1, 0);
+    ledger.finishStage(taskId, "sent");
+    const task = ledger.task(taskId)!;
+    expect(task.state).toBe("queued");
+    expect(task.stageIndex).toBe(0);
+    expect(ledger.getState().completed["etsy/message"] ?? 0).toBe(0);
+    expect(ledger.getState().agents.some((a) => a.taskId === taskId)).toBe(false);
+  });
+
+  it("uses an approval up when the action is done, so it can't be used again", () => {
+    const { ledger, taskId } = approvedAndSending();
+    ledger.work(taskId, 1, 0);
+    ledger.finishStage(taskId, "sent");
+    const task = ledger.task(taskId)!;
+    expect(task.state).toBe("done");
+    expect(task.approvedContent).toBeUndefined();
+    expect(task.approvedAt).toBeUndefined();
   });
 });

@@ -1,3 +1,4 @@
+import { rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +18,18 @@ const staticDir = process.env.FACILITY_STATIC_DIR ?? resolve(here, "..", "..", "
 const store = new Store(join(dataDir, "facility.db"));
 const facility = new Facility(store);
 facility.start();
+
+// Until the owner sets an approval PIN, nothing can be approved. The first PIN
+// needs a one-time link, kept in the data folder (which AI tools are denied)
+// and opened for the owner by the installer. It's never printed to the log.
+const setupFile = join(dataDir, "owner-setup-link.txt");
+const setupCode = facility.owner.newSetupCode();
+if (setupCode) {
+  writeFileSync(setupFile, `http://localhost:${port}/?setup=${setupCode}\n`, { mode: 0o600 });
+  console.log(`No approval PIN yet. The one-time link to set it is in ${setupFile}`);
+} else {
+  rmSync(setupFile, { force: true });
+}
 
 const server = createFacilityServer(facility, { staticDir, allowedHosts });
 server.listen(port, host, () => {

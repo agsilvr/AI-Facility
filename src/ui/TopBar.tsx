@@ -1,6 +1,7 @@
 import { completedCount } from "../core/ledger";
 import type { FacilityState } from "../core/types";
 import { money } from "./format";
+import { OwnerBadge, type Owner } from "./OwnerLock";
 
 interface Props {
   state: FacilityState;
@@ -8,9 +9,11 @@ interface Props {
   speed: number;
   onToggleRunning: () => void;
   onSpeed: (speed: number) => void;
+  owner: Owner;
+  now: number;
 }
 
-export function TopBar({ state, running, speed, onToggleRunning, onSpeed }: Props) {
+export function TopBar({ state, running, speed, onToggleRunning, onSpeed, owner, now }: Props) {
   const pending = state.approvals.filter((a) => a.status === "pending").length;
   const done = completedCount(state);
   const working = state.agents.filter((a) => a.status === "working").length;
@@ -52,6 +55,7 @@ export function TopBar({ state, running, speed, onToggleRunning, onSpeed }: Prop
       </div>
 
       <div className="controls">
+        <OwnerBadge owner={owner} now={now} />
         <button onClick={onToggleRunning} className={running ? "" : "primary"}>
           {running ? "Pause facility" : "Resume facility"}
         </button>

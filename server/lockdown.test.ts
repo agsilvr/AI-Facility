@@ -35,6 +35,10 @@ describe("Claude Code lockdown settings", () => {
     },
   );
 
+  it("can't read the facility's database or PIN setup link, even from a shell command", () => {
+    expect(settings.sandbox.filesystem.denyRead).toContain("./data");
+  });
+
   it("can't edit its own rules or the facility's database", () => {
     expect(deny).toContain("Edit(./.claude/settings.json)");
     expect(deny).toContain("Edit(./data/**)");
