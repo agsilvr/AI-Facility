@@ -1,9 +1,12 @@
+import { checkDraft, hasBlockingFlag, serializeDraft } from "./safety";
 import type {
   Agent,
   AgentId,
   Approval,
   ApprovalId,
+  Draft,
   FacilityState,
+  Flag,
   LogLevel,
   Stage,
   Task,
@@ -58,9 +61,11 @@ export class Ledger {
     const interrupted = saved.tasks.filter((t) => t.state === "active").length;
     const state: FacilityState = {
       ...saved,
-      tasks: saved.tasks.map((t) =>
-        t.state === "active" ? { ...t, state: "queued", agentId: null, progress: 0 } : t,
-      ),
+      tasks: saved.tasks.map((t) => {
+        const withFlags = { ...t, flags: t.flags ?? [] };
+        return t.state === "active" ? { ...withFlags, state: "queued", agentId: null, progress: 0 } : withFlags;
+      }),
+      approvals: saved.approvals.map((a) => ({ ...a, flags: a.flags ?? [] })),
       agents: saved.agents.map((a) =>
         a.status === "paused" ? { ...a, taskId: null } : { ...a, status: "idle", taskId: null },
       ),
@@ -134,6 +139,7 @@ export class Ledger {
       createdAt: at,
       updatedAt: at,
       notes: [],
+      flags: [],
     };
     this.commit({ ...this.state, tasks: [...this.state.tasks, task] });
     this.log(`New task: ${title}`, "info", wingId);
@@ -147,6 +153,12 @@ export class Ledger {
     if (!task || !agent || task.state !== "queued" || agent.taskId) return;
     const stage = this.stagesOf(task)[task.stageIndex];
     if (!stage) return;
+    if (stage.action && !this.mayAct(task)) {
+      // Fail closed: the content no longer matches what the owner approved.
+      this.patchTask(taskId, { state: "queued", stageIndex: Math.max(0, task.stageIndex - 1), approvedContent: undefined });
+      this.log(`Blocked "${stage.label}" on ${task.title}: it no longer matches what you approved. Sent back for review.`, "warning", task.wingId);
+      return;
+    }
     this.patchTask(taskId, { state: "active", agentId, progress: 0 });
     this.patchAgent(agentId, { status: "working", taskId, roomId: stage.roomId });
     this.log(`${agent.name} started "${stage.label}" on ${task.title}`, "info", task.wingId);
@@ -166,14 +178,37 @@ export class Ledger {
     return progress >= 1;
   }
 
-  /** Finish the current stage: request approval, hand back to the queue, or complete. */
-  finishStage(taskId: TaskId, note: string) {
+  /**
+   * True only when the task sits on an action stage and its draft is exactly
+   * the content the owner approved. Actions must check this before running.
+   */
+  mayAct(task: Task): boolean {
+    const stage = this.stagesOf(task)[task.stageIndex];
+    if (!stage?.action || !task.draft) return false;
+    return task.approvedContent !== undefined && task.approvedContent === serializeDraft(task.draft);
+  }
+
+  /**
+   * Finish the current stage: request approval, hand back to the queue, or
+   * complete. A stage may produce a draft; it is checked here, every time, and
+   * the findings are stored with the task along with any input findings.
+   */
+  finishStage(taskId: TaskId, note: string, output: { draft?: Draft; inputFlags?: Flag[] } = {}) {
     const task = this.task(taskId);
     if (!task) return;
     const stage = this.stagesOf(task)[task.stageIndex];
     if (!stage) return;
     const notes = [...task.notes, `${stage.label}: ${note}`];
+    const draft = output.draft ?? task.draft;
+    const flags = [...(output.inputFlags ?? []), ...(draft ? checkDraft(draft) : [])];
+    // An approval with nothing to look at would approve an action blind.
+    if (stage.needsApproval && !draft) {
+      flags.push({ level: "block", code: "no-draft", message: "There is nothing to review: this step produced no draft." });
+    }
     this.releaseAgent(task.agentId);
+    // Any new output invalidates an earlier approval.
+    const changed = output.draft !== undefined;
+    this.patchTask(taskId, { draft, flags, ...(changed ? { approvedContent: undefined } : {}) });
 
     if (stage.needsApproval) {
       const approval: Approval = {
@@ -181,6 +216,8 @@ export class Ledger {
         taskId,
         wingId: task.wingId,
         summary: note,
+        content: draft ? serializeDraft(draft) : undefined,
+        flags,
         status: "pending",
         createdAt: this.now(),
       };
@@ -192,10 +229,25 @@ export class Ledger {
     this.moveOn(taskId, notes);
   }
 
-  decide(approvalId: ApprovalId, approve: boolean) {
+  /**
+   * Record the owner's decision. Approval is refused (returns false) when the
+   * content has blocking findings, or when the task's draft is no longer the
+   * content the owner was shown.
+   */
+  decide(approvalId: ApprovalId, approve: boolean): boolean {
     const approval = this.state.approvals.find((a) => a.id === approvalId);
-    if (!approval || approval.status !== "pending") return;
+    if (!approval || approval.status !== "pending") return false;
     const task = this.task(approval.taskId);
+    if (approve) {
+      if (hasBlockingFlag(approval.flags)) {
+        this.log(`Can't approve "${task?.title}": it has a blocking safety finding. Send it back instead.`, "warning", approval.wingId);
+        return false;
+      }
+      if (task && (approval.content ?? "null") !== serializeDraft(task.draft)) {
+        this.log(`Can't approve "${task.title}": the draft changed after it was shown to you.`, "warning", approval.wingId);
+        return false;
+      }
+    }
     this.commit({
       ...this.state,
       approvals: this.state.approvals.map((a) =>
@@ -204,8 +256,9 @@ export class Ledger {
           : a,
       ),
     });
-    if (!task) return;
+    if (!task) return true;
     if (approve) {
+      this.patchTask(task.id, { approvedContent: approval.content ?? "null" });
       this.log(`Approved: ${task.title}`, "success", task.wingId);
       this.moveOn(task.id, task.notes);
     } else {
@@ -214,9 +267,11 @@ export class Ledger {
         state: "queued",
         stageIndex: Math.max(0, task.stageIndex - 1),
         progress: 0,
+        approvedContent: undefined,
       });
       this.log(`Sent back for rework: ${task.title}`, "warning", task.wingId);
     }
+    return true;
   }
 
   setAgentPaused(agentId: AgentId, paused: boolean) {

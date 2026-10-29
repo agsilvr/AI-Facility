@@ -77,7 +77,9 @@ async function handle(
       const id = decodeURIComponent(approval[1]);
       const found = facility.ledger.getState().approvals.find((a) => a.id === id && a.status === "pending");
       if (!found) throw new HttpError(404, "No pending approval with that id");
-      facility.ledger.decide(id, body.approve);
+      if (!facility.ledger.decide(id, body.approve)) {
+        throw new HttpError(409, "Approval refused: the content has a blocking safety finding or changed since you saw it");
+      }
       return sendJson(res, 200, { ok: true });
     }
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { completedCount, completedKey } from "../core/ledger";
 import type { FacilityPort } from "../core/port";
-import type { FacilityState } from "../core/types";
+import type { Draft, FacilityState, Flag } from "../core/types";
 import type { Selection } from "../facility/render";
 import { money, stageLabel, timeAgo } from "./format";
 
@@ -78,8 +78,26 @@ function Attention({ ledger, state, now }: { ledger: FacilityPort; state: Facili
             <ul className="notes">
               {task?.notes.map((n, i) => <li key={i}>{n}</li>)}
             </ul>
+            {a.content && <DraftPreview content={a.content} />}
+            {a.flags.length > 0 && (
+              <ul className="flags">
+                {a.flags.map((f) => (
+                  <li key={`${f.level}-${f.code}`} className={`flag-${f.level}`}>
+                    {f.level === "block" ? "Blocked: " : "Check: "}
+                    {f.message}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="card-actions">
-              <button className="primary" onClick={() => ledger.decide(a.id, true)}>Approve</button>
+              <button
+                className="primary"
+                disabled={blocked(a.flags)}
+                title={blocked(a.flags) ? "This can't go out as it is. Send it back to be redone." : undefined}
+                onClick={() => ledger.decide(a.id, true)}
+              >
+                Approve
+              </button>
               <button onClick={() => ledger.decide(a.id, false)}>Send back</button>
             </div>
           </li>
@@ -87,6 +105,39 @@ function Attention({ ledger, state, now }: { ledger: FacilityPort; state: Facili
       })}
     </ul>
   );
+}
+
+function blocked(flags: Flag[]) {
+  return flags.some((f) => f.level === "block");
+}
+
+/** Shows exactly what will go out if approved: the same string approval binds to. */
+function DraftPreview({ content }: { content: string }) {
+  let draft: Draft | null = null;
+  try {
+    draft = JSON.parse(content) as Draft;
+  } catch {
+    return <pre className="draft">{content}</pre>;
+  }
+  if (draft?.kind === "listing") {
+    return (
+      <div className="draft">
+        <div className="draft-label">Listing that will be published</div>
+        <strong>{draft.title}</strong> <span className="muted">${draft.priceUsd.toFixed(2)}</span>
+        <p>{draft.description}</p>
+        <div className="muted">Tags: {draft.tags.join(", ")}</div>
+      </div>
+    );
+  }
+  if (draft?.kind === "reply") {
+    return (
+      <div className="draft">
+        <div className="draft-label">Reply that will be sent</div>
+        <p>{draft.message}</p>
+      </div>
+    );
+  }
+  return null;
 }
 
 function Flow({ state }: { state: FacilityState }) {

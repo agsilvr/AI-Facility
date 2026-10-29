@@ -2,11 +2,13 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { FacilityState } from "../src/core/types";
+import type { AuditEntry } from "./agents/reader";
 
 /**
  * Local SQLite storage on the Mac mini. The live state is saved as one
  * snapshot row; every log entry is also kept in a history table, so nothing
- * that happened is lost when old entries drop out of the live view.
+ * that happened is lost when old entries drop out of the live view. Every AI
+ * call is written to an append-only audit table.
  */
 export class Store {
   private db: DatabaseSync;
@@ -27,6 +29,27 @@ export class Store {
         wing_id TEXT,
         level TEXT NOT NULL,
         text TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS audit (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        at INTEGER NOT NULL,
+        purpose TEXT NOT NULL,
+        source TEXT NOT NULL,
+        input_sha256 TEXT NOT NULL,
+        output_sha256 TEXT,
+        ok INTEGER NOT NULL,
+        error TEXT,
+        cost_usd REAL NOT NULL,
+        flags TEXT NOT NULL
+      );
+      -- The audit trail is append-only: the database itself refuses edits and deletes.
+      CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit
+        BEGIN SELECT RAISE(ABORT, 'audit is append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit
+        BEGIN SELECT RAISE(ABORT, 'audit is append-only'); END;
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
       );
     `);
   }
@@ -52,6 +75,40 @@ export class Store {
       this.db.exec("ROLLBACK");
       throw err;
     }
+  }
+
+  addAudit(e: AuditEntry) {
+    this.db
+      .prepare(
+        "INSERT INTO audit (at, purpose, source, input_sha256, output_sha256, ok, error, cost_usd, flags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(e.at, e.purpose, e.source, e.inputSha256, e.outputSha256, e.ok ? 1 : 0, e.error, e.costUsd, JSON.stringify(e.flags));
+  }
+
+  auditEntries(limit = 100): AuditEntry[] {
+    const rows = this.db.prepare("SELECT * FROM audit ORDER BY seq DESC LIMIT ?").all(limit) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      at: r.at as number,
+      purpose: r.purpose as string,
+      source: r.source as string,
+      inputSha256: r.input_sha256 as string,
+      outputSha256: (r.output_sha256 as string | null) ?? null,
+      ok: r.ok === 1,
+      error: (r.error as string | null) ?? null,
+      costUsd: r.cost_usd as number,
+      flags: JSON.parse(r.flags as string) as string[],
+    }));
+  }
+
+  getSetting(key: string): string | null {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  setSetting(key: string, value: string) {
+    this.db
+      .prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run(key, value);
   }
 
   historyCount(): number {

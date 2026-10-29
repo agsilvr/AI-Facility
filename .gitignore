@@ -7,3 +7,4 @@ dist
 build
 data
 logs
+.claude/settings.local.json

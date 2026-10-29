@@ -32,7 +32,7 @@ export const wings: Wing[] = [
           { id: "research", label: "Research trend", roomId: "etsy-lab" },
           { id: "design", label: "Design product", roomId: "etsy-studio" },
           { id: "list", label: "Draft listing", roomId: "etsy-bay", needsApproval: true },
-          { id: "publish", label: "Publish to shop", roomId: "dock" },
+          { id: "publish", label: "Publish to shop", roomId: "dock", action: "etsy.publishListing" },
         ],
       },
       {
@@ -40,7 +40,7 @@ export const wings: Wing[] = [
         label: "Customer message",
         stages: [
           { id: "reply", label: "Draft reply", roomId: "etsy-comms", needsApproval: true },
-          { id: "send", label: "Send reply", roomId: "etsy-comms" },
+          { id: "send", label: "Send reply", roomId: "etsy-comms", action: "etsy.sendReply" },
         ],
       },
     ],
