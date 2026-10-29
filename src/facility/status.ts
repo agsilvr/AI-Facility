@@ -1,7 +1,7 @@
 import type { FacilityState, Room, RoomId, Task } from "../core/types";
 
-// What each room shows comes from the ledger only, so the 2D map and the 3D
-// facility always agree with each other and with the sidebar.
+// What each room shows comes from the ledger only, so the map always agrees
+// with the sidebar.
 
 export interface Selection {
   kind: "room" | "agent";

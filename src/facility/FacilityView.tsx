@@ -70,6 +70,8 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
     const ctx = canvas.getContext("2d")!;
     const background = paintBackground(layout, ledger.getState());
     const earth = earthPattern(ctx);
+    // A new floor plan moves rooms, so everyone starts again at their workstation.
+    walkers.current.clear();
     let frame = 0;
     let last = performance.now();
     let placed = false;

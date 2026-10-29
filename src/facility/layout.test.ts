@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { rooms, wings } from "../core/seed";
 import type { Room, Wing } from "../core/types";
-import { buildLayout, contains, DOOR_W, layoutKey, roomAt, roomWidth, type Rect } from "./layout";
+import { AISLE, buildLayout, contains, DOOR_W, layoutKey, roomAt, roomWidth, STAND_Y, type Rect } from "./layout";
 import { placeWalker, route, step, type Target } from "./movement";
 
 const layout = buildLayout(wings, rooms);
@@ -35,8 +35,12 @@ describe("floor plan", () => {
     }
   });
 
-  it("lays wings out left to right in order, each with its own stretch of the hall", () => {
-    expect(layout.wings.map((w) => w.wingId)).toEqual(wings.map((w) => w.id));
+  it("puts the core in the middle, with the first business to its right and the next to its left", () => {
+    expect(layout.wings.map((w) => [w.wingId, w.slot])).toEqual([
+      ["expansion", -1],
+      ["core", 0],
+      ["etsy", 1],
+    ]);
     for (let i = 1; i < layout.wings.length; i++) expect(layout.wings[i].x0).toBeGreaterThan(layout.wings[i - 1].x1);
     for (const r of layout.rooms.values()) {
       const wing = layout.wings.find((w) => w.wingId === r.wingId)!;
@@ -45,13 +49,58 @@ describe("floor plan", () => {
     }
   });
 
-  it("adds a new business at the end without moving anything already there", () => {
+  it("puts the Command Center at the heart of the core, biggest room, with the core's other rooms across the hall", () => {
+    const command = layout.rooms.get("command")!;
+    const core = layout.wings.find((w) => w.wingId === "core")!;
+    expect(command.side).toBe("top");
+    expect(command.rect.x + command.rect.w / 2).toBeCloseTo((core.x0 + core.x1) / 2, 0);
+    expect(layout.center.x).toBeCloseTo(command.rect.x + command.rect.w / 2);
+    for (const r of layout.rooms.values()) if (r !== command) expect(r.rect.w * r.rect.h).toBeLessThan(command.rect.w * command.rect.h);
+    const across = ["vault", "security", "dock"].map((id) => layout.rooms.get(id)!);
+    expect(across.map((r) => r.side)).toEqual(["bottom", "bottom", "bottom"]);
+    expect(across.map((r) => r.rect.x)).toEqual([...across.map((r) => r.rect.x)].sort((a, b) => a - b));
+  });
+
+  it("lays a business out in the order its work flows, finishing next to the core", () => {
+    // Research, then design, then the factory, which is the Etsy room nearest the core.
+    const x = (id: string) => layout.rooms.get(id)!.rect.x;
+    const etsy = rooms.filter((r) => r.wingId === "etsy").map((r) => r.id);
+    expect(Math.min(...etsy.map(x))).toBe(x("etsy-factory"));
+    expect(x("etsy-lab")).toBeGreaterThan(x("etsy-factory"));
+    expect(x("etsy-studio")).toBeGreaterThan(x("etsy-comms"));
+  });
+
+  it("lines up both rows of a district, so each district is a tidy block", () => {
+    for (const wing of layout.wings) {
+      for (const side of ["top", "bottom"] as const) {
+        const row = [...layout.rooms.values()].filter((r) => r.wingId === wing.wingId && r.side === side);
+        if (!row.length) continue;
+        expect(Math.min(...row.map((r) => r.rect.x))).toBe(wing.x0);
+        expect(Math.max(...row.map((r) => r.rect.x + r.rect.w))).toBe(wing.x1);
+      }
+    }
+  });
+
+  it("adds a new business without moving any room relative to the Command Center", () => {
     const newWing: Wing = { id: "candles", name: "Candle Wing", color: "#f472b6", budgetMonthly: 5, workflows: [] };
     const newRooms: Room[] = [{ id: "candles-factory", wingId: "candles", name: "Factory Line", kind: "factory", theme: "goods" }];
     const bigger = buildLayout([...wings, newWing], [...rooms, ...newRooms]);
-    for (const [id, r] of layout.rooms) expect(bigger.rooms.get(id)!.rect).toEqual(r.rect);
+    const shift = bigger.center.x - layout.center.x;
+    for (const [id, r] of layout.rooms) expect(bigger.rooms.get(id)!.rect).toEqual({ ...r.rect, x: r.rect.x + shift });
     expect(bigger.width).toBeGreaterThan(layout.width);
-    expect(bigger.rooms.get("candles-factory")!.rect.x).toBeGreaterThan(layout.wings[layout.wings.length - 1].x1);
+    // The third business goes on the right, after the first.
+    expect(bigger.wings.find((w) => w.wingId === "candles")!.slot).toBe(2);
+  });
+
+  it("gives every room workstations on the stand line, clear of the walkway from its door", () => {
+    for (const r of layout.rooms.values()) {
+      for (const st of r.stations) {
+        expect(st.y).toBe(r.floor.y + STAND_Y);
+        expect(contains(r.floor, st.x, st.y)).toBe(true);
+        if (r.side === "bottom") expect(Math.abs(st.x - r.door.inside.x)).toBeGreaterThan(AISLE);
+      }
+      if (r.kind !== "sealed") expect(r.stations.length).toBeGreaterThan(0);
+    }
   });
 
   it("finds the room a point is in", () => {

@@ -63,10 +63,10 @@ export function toWorld(camera: Camera, screen: { x: number; y: number }, view: 
   return { x: camera.x + (screen.x - view.width / 2) / camera.zoom, y: camera.y + (screen.y - view.height / 2) / camera.zoom };
 }
 
-/** Where the map opens: as big as fits the facility's height, starting from its left end. */
+/** Where the map opens: as big as fits the facility's height, centred on the Command Center. */
 export function startCamera(layout: FacilityLayout, view: Viewport): Camera {
   const zoom = zoomToFit({ w: 1, h: layout.height }, view);
-  return clampCamera({ zoom, x: 0, y: layout.height / 2 }, layout, view);
+  return clampCamera({ zoom, x: layout.center.x, y: layout.height / 2 }, layout, view);
 }
 
 /** The camera for looking at an area, such as a wing or a room. */

@@ -78,8 +78,11 @@ Read them before every change and follow them without exception.
   above, drawn on a canvas in `src/facility/`. There is one map, not several views of it.
   Keep it dependency-light; justify every new package (there is no rendering library).
   All art, sprites and the pixel font are drawn in code; nothing is fetched at runtime.
-- Every room's look comes from its `kind` (and a factory's `theme`) in `src/facility/rooms.ts`.
-  Anything a room shows as live (screens, items on a belt, crates) must come from the ledger.
+- Every kind of room has its own file in `src/facility/rooms/` (floor, walls, furniture, sign
+  icon), built from the shared pieces in `rooms/kit.ts`; a factory's look also follows its
+  `theme`. Workstations sit where `layout` puts them, so the crew always stand at one.
+  Anything a room shows as live (screens, items on a belt, crates) must come from the ledger,
+  and machines only run while someone is working there.
 - `npm run typecheck`, `npm test` and `npm run build` must pass before any commit. CI runs
   them on every pull request.
 - Every behaviour change comes with a test. Ledger and dispatch logic must stay fully covered.
@@ -97,8 +100,11 @@ Read them before every change and follow them without exception.
 - `src/core/`: types, ledger, dispatch, safety checks, workflow policy, seed data (wings,
   rooms, agents, workflows).
 - `src/sim/`: demo mode with simulated agents and canned output.
-- `src/facility/`: the map: `layout` (floor plan: a main hall with rooms on both sides, one
-  district per wing), `movement` (how the crew walk), `camera` (pan and zoom), `status`
-  (what each room shows), `pixels` (palette, font, crew sprites), `rooms` (each kind of room),
-  `render` (draws it all) and `FacilityView` (the canvas and its controls).
+- `src/facility/`: the map: `layout` (floor plan: a main hall with rooms on both sides; the
+  core in the middle with the Command Center at its heart, each business a district beside it
+  laid out in the order its work flows), `movement` (how the crew walk), `targets` (which
+  workstation each crew member stands at), `camera` (pan and zoom), `status` (what each room
+  shows), `pixels` (palette, font, crew sprites), `rooms/` (one file per kind of room),
+  `render` (the dirt, hull and hall, and draws it all) and `FacilityView` (the canvas and its
+  controls).
 - `src/ui/`: top bar, sidebar panels (Needs you, Task flow, Crew, Log) and inspector.

@@ -5,10 +5,11 @@ business is a wing with its own rooms, crew and budget. The first wing is an Ets
 
 You can watch every agent walk between rooms as work moves through each stage, on a
 retro pixel-art map of a base dug into the dirt, seen from above like a base-building game.
-Each business is its own district along the main hall: a research lab, a design studio, a
-factory line (clothing, for the Etsy shop), comms, plus the shared command center, security
-checkpoint, vault and shipping dock. Drag to move around, scroll or pinch to zoom, and click
-a room or a crew member to see what they're doing.
+The Command Center sits in the middle, with the Vault, the Security checkpoint and the
+Shipping Dock across the hall from it. Each business is its own district beside the core, its
+rooms in the order its work flows: for the Etsy shop, a Research Lab, a Design Studio and a
+Factory Line that makes clothing, plus Comms for customer messages. Drag to move around,
+scroll or pinch to zoom, and click a room or a crew member to see what they're doing.
 Anything that needs you lights up red, and nothing goes out to customers or the shop
 without your approval.
 

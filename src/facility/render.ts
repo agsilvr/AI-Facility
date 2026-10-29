@@ -1,9 +1,10 @@
 import { completedCount } from "../core/ledger";
 import type { Agent, FacilityState } from "../core/types";
-import { contains, HALL_H, MARGIN, TILE, type FacilityLayout } from "./layout";
+import { contains, HALL_H, MARGIN, TILE, type FacilityLayout, type Rect } from "./layout";
 import type { Walker } from "./movement";
 import { crewSprite, frame, hash, P, rect, SPRITE_H, SPRITE_W, tag, text, textWidth } from "./pixels";
-import { animateRoom, hazard, paintRoom } from "./rooms";
+import { animateRoom, paintRoom } from "./rooms";
+import { glow, hazard } from "./rooms/kit";
 import { pendingApprovals, roomNeedsAttention, tasksInRoom, type Selection } from "./status";
 
 export type { Selection };
@@ -42,7 +43,7 @@ export function paintBackground(layout: FacilityLayout, state: FacilityState): H
   paintHall(ctx, layout, state);
   for (const room of state.rooms) {
     const rl = layout.rooms.get(room.id);
-    if (rl) paintRoom(ctx, room, rl, wingColor(state, room.wingId));
+    if (rl) paintRoom(ctx, room, rl, wingColor(state, room.wingId), state.wings);
   }
   return canvas;
 }
@@ -124,54 +125,109 @@ function paintEarth(ctx: CanvasRenderingContext2D, layout: FacilityLayout) {
   }
 }
 
-/** The station's outer hull: the metal shell everything is built inside. */
+/** Each district's block of rooms, from its tallest room's top to its deepest room's bottom. */
+function districtBlocks(layout: FacilityLayout): (Rect & { wingId: string })[] {
+  return layout.wings.map((wing) => {
+    const own = [...layout.rooms.values()].filter((r) => r.wingId === wing.wingId);
+    const top = Math.min(layout.hall.y, ...own.map((r) => r.rect.y));
+    const bottom = Math.max(layout.hall.y + layout.hall.h, ...own.map((r) => r.rect.y + r.rect.h));
+    return { wingId: wing.wingId, x: wing.x0 - 6, y: top - 6, w: wing.x1 - wing.x0 + 12, h: bottom - top + 12 };
+  });
+}
+
+/**
+ * The station's outer hull: a metal shell around each district and the hall,
+ * so the core, with the tall Command Center, stands out in the middle. Vent
+ * pipes run up through the dirt towards the surface.
+ */
 function paintHull(ctx: CanvasRenderingContext2D, layout: FacilityLayout) {
-  const x0 = layout.hall.x - 6;
-  const x1 = layout.hall.x + layout.hall.w + 6;
-  const y0 = MARGIN - 8;
-  const y1 = layout.height - MARGIN + 8;
-  rect(ctx, x0 - 2, y0 - 2, x1 - x0 + 4, y1 - y0 + 4, P.ink);
-  rect(ctx, x0, y0, x1 - x0, y1 - y0, P.hull1);
-  rect(ctx, x0, y0, x1 - x0, 1, P.steel1);
-  for (let y = y0 + 8; y < y1; y += 16) rect(ctx, x0, y, x1 - x0, 1, P.hull0);
-  for (let x = x0 + 8; x < x1; x += 32) {
-    for (let y = y0 + 4; y < y1; y += 16) rect(ctx, x + ((y >> 4) % 2) * 16, y, 1, 1, P.hull2);
+  const h = layout.hall;
+  const shells = [...districtBlocks(layout), { wingId: "", x: h.x - 6, y: h.y - 6, w: h.w + 12, h: h.h + 12 }];
+  for (const b of shells) rect(ctx, b.x - 2, b.y - 2, b.w + 4, b.h + 4, P.ink);
+  for (const b of shells) {
+    rect(ctx, b.x, b.y, b.w, b.h, P.hull1);
+    rect(ctx, b.x, b.y, b.w, 1, P.steel1);
+    for (let y = b.y + 8; y < b.y + b.h; y += 16) rect(ctx, b.x, y, b.w, 1, P.hull0);
+    for (let x = b.x + 8; x < b.x + b.w; x += 32) {
+      for (let y = b.y + 4; y < b.y + b.h; y += 16) rect(ctx, x + ((y >> 4) % 2) * 16, y, 1, 1, P.hull2);
+    }
+  }
+  for (const b of districtBlocks(layout)) {
+    for (const x of [b.x + 14, b.x + b.w - 20]) {
+      rect(ctx, x - 1, 0, 8, b.y - 1, P.ink);
+      rect(ctx, x, 0, 6, b.y - 1, P.steel0);
+      rect(ctx, x + 1, 0, 1, b.y - 1, P.steel1);
+      for (let y = b.y - 24; y > 0; y -= 40) rect(ctx, x - 2, y, 10, 3, P.steel1);
+    }
   }
 }
 
-/** The main hall: a metal floor with a lit walking lane and each wing's name painted on it. */
+/** The main hall: metal floor plates, wall lamps, each district's name and signs pointing to Command. */
 function paintHall(ctx: CanvasRenderingContext2D, layout: FacilityLayout, state: FacilityState) {
   const h = layout.hall;
   for (let x = h.x; x < h.x + h.w; x += TILE) {
     for (let y = h.y; y < h.y + h.h; y += TILE) {
-      rect(ctx, x, y, TILE, TILE, ((x - h.x + y - h.y) / TILE) % 2 ? P.steel0 : "#40465e");
-      rect(ctx, x, y, TILE, 1, "rgba(255,255,255,0.06)");
+      const w = Math.min(TILE, h.x + h.w - x);
+      rect(ctx, x, y, w, TILE, ((x - h.x + y - h.y) / TILE) % 2 ? "#363c52" : "#3b4259");
+      rect(ctx, x, y, w, 1, "rgba(255,255,255,0.06)");
       rect(ctx, x, y, 1, TILE, "rgba(0,0,0,0.2)");
+      rect(ctx, x + 2, y + 2, 1, 1, "#525a78");
+      rect(ctx, x + w - 3, y + TILE - 3, 1, 1, "#262a3c");
     }
   }
-  // Walls at either end of the hall.
+  // The walking lane, a little brighter, with a guide line down the middle.
+  rect(ctx, h.x, layout.laneY - 6, h.w, 14, "rgba(255,255,255,0.03)");
+  for (let x = h.x + 4; x < h.x + h.w - 4; x += 12) rect(ctx, x, layout.laneY + 6, 6, 1, "rgba(255,255,255,0.12)");
+  // Shadows under the hall's walls, and the end walls.
+  rect(ctx, h.x, h.y, h.w, 3, "rgba(0,0,0,0.3)");
   rect(ctx, h.x - 6, h.y, 6, h.h, P.wall0);
   rect(ctx, h.x + h.w, h.y, 6, h.h, P.wall0);
-  // Dashed guide line along the lane.
-  for (let x = h.x + 4; x < h.x + h.w - 4; x += 12) rect(ctx, x, layout.laneY + 6, 6, 1, "rgba(255,255,255,0.12)");
 
+  const core = layout.wings.find((w) => w.slot === 0);
   for (const wing of layout.wings) {
     const w = state.wings.find((x) => x.id === wing.wingId);
     const color = wingColor(state, wing.wingId);
-    // Edge strips in the wing's colour, and its name on the floor.
-    rect(ctx, wing.x0, h.y + 1, wing.x1 - wing.x0, 2, color);
-    rect(ctx, wing.x0, h.y + h.h - 3, wing.x1 - wing.x0, 2, color);
+    // Edge strips in the district's colour, and its name on the floor.
+    rect(ctx, wing.x0, h.y + 3, wing.x1 - wing.x0, 1, color);
+    rect(ctx, wing.x0, h.y + h.h - 2, wing.x1 - wing.x0, 1, color);
     const name = (w?.name ?? wing.wingId).toUpperCase();
-    rect(ctx, wing.x0 + 4, h.y + 6, textWidth(name) + 6, 9, P.ink);
-    text(ctx, name, wing.x0 + 7, h.y + 8, color);
-    // A bulkhead where one wing ends and the next begins.
-    if (wing !== layout.wings[layout.wings.length - 1]) {
-      const bx = wing.x1 + 20;
-      rect(ctx, bx, h.y, 4, HALL_H, P.steel1);
-      rect(ctx, bx + 1, h.y, 1, HALL_H, P.steel2);
-      hazard(ctx, bx - 6, h.y, 6, 3);
-      hazard(ctx, bx - 6, h.y + HALL_H - 3, 6, 3);
+    const nx = wing.slot < 0 ? wing.x0 + 6 : wing.x1 - textWidth(name) - 12;
+    rect(ctx, nx, h.y + 7, textWidth(name) + 6, 9, P.ink);
+    text(ctx, name, nx + 3, h.y + 9, color);
+    // A sign pointing the way to Command, at the end of the district nearest the core.
+    if (core && wing.slot !== 0) {
+      const label = wing.slot > 0 ? "< COMMAND" : "COMMAND >";
+      const sx = wing.slot > 0 ? wing.x0 + 6 : wing.x1 - textWidth(label) - 12;
+      rect(ctx, sx, h.y + h.h - 15, textWidth(label) + 6, 9, "#0f1220");
+      text(ctx, label, sx + 3, h.y + h.h - 13, P.blue);
     }
+    // Wall lamps along the hall, each throwing a pool of light.
+    for (let x = wing.x0 + 24; x < wing.x1 - 8; x += 64) {
+      rect(ctx, x - 3, h.y, 6, 2, "#fff3c4");
+      glow(ctx, x, h.y + 6, 22, 9, "#ffe9a8", 0.05);
+    }
+  }
+  // Bulkheads where one district ends and the next begins.
+  for (let i = 1; i < layout.wings.length; i++) {
+    const bx = Math.round((layout.wings[i - 1].x1 + layout.wings[i].x0) / 2) - 2;
+    rect(ctx, bx - 1, h.y, 6, HALL_H, P.ink);
+    rect(ctx, bx, h.y, 4, HALL_H, P.steel1);
+    rect(ctx, bx + 1, h.y, 1, HALL_H, P.steel2);
+    hazard(ctx, bx - 8, h.y, 20, 3);
+    hazard(ctx, bx - 8, h.y + HALL_H - 3, 20, 3);
+  }
+  // The facility's seal on the floor in front of the Command Center.
+  if (core) {
+    const cx = Math.round(layout.center.x);
+    const cy = h.y + h.h / 2;
+    for (const [r, c] of [[20, "#2a3f6e"], [18, "#30395a"], [12, "#2a3f6e"], [10, "#353d5a"]] as const) {
+      for (let y = -Math.min(r, h.h / 2 - 3); y <= Math.min(r, h.h / 2 - 3); y++) {
+        const half = Math.round(r * 1.6 * Math.sqrt(Math.max(0, 1 - (y * y) / (r * r))));
+        rect(ctx, cx - half, cy + y, half * 2 + 1, 1, c);
+      }
+    }
+    rect(ctx, cx - 1, cy - 6, 3, 13, "#38bdf8");
+    rect(ctx, cx - 6, cy - 1, 13, 3, "#38bdf8");
   }
 }
 
@@ -191,7 +247,8 @@ export function drawFacility(ctx: CanvasRenderingContext2D, scene: Scene, backgr
   for (const room of state.rooms) {
     const rl = layout.rooms.get(room.id);
     if (!rl) continue;
-    animateRoom(ctx, room, rl, { time, state, busy: tasksInRoom(state, room.id), completed, pending }, wingColor(state, room.wingId));
+    const working = state.agents.filter((a) => a.roomId === room.id && a.status === "working").length;
+    animateRoom(ctx, room, rl, { time, state, busy: tasksInRoom(state, room.id), working, completed, pending }, wingColor(state, room.wingId), state.wings);
   }
 
   // Crew, nearest the viewer drawn last.
@@ -233,10 +290,10 @@ function drawCrew(ctx: CanvasRenderingContext2D, scene: Scene, agent: Agent, w: 
   const hovered = scene.hovered?.kind === "agent" && scene.hovered.id === agent.id;
   if (selected || hovered) brackets(ctx, x - SPRITE_W / 2 - 2, y - SPRITE_H - 1, SPRITE_W + 4, SPRITE_H + 3, selected ? P.white : "rgba(255,255,255,0.5)");
 
-  // Name above the head, and what they're up to above that.
-  tag(ctx, agent.name.toUpperCase(), x, y - SPRITE_H - 10, selected ? P.yellow : P.white);
+  // The name at their feet, so it never hides their workstation, and what they're up to over their head.
+  tag(ctx, agent.name.toUpperCase(), x, y + 2, selected ? P.yellow : P.white);
   const task = agent.taskId ? state.tasks.find((t) => t.id === agent.taskId) : undefined;
-  const top = y - SPRITE_H - 16;
+  const top = y - SPRITE_H - 6;
   if (agent.status === "paused") {
     tag(ctx, "II", x, top - 4, P.ink, P.yellow);
   } else if (agent.status === "working" && task) {
@@ -281,7 +338,7 @@ function marchingAnts(ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
 export function hitTest(layout: FacilityLayout, walkers: Map<string, Walker>, x: number, y: number): Selection | null {
   let best: { id: string; y: number } | null = null;
   for (const [id, w] of walkers) {
-    const inside = Math.abs(x - w.x) <= SPRITE_W / 2 + 1 && y <= w.y + 2 && y >= w.y - SPRITE_H - 10;
+    const inside = Math.abs(x - w.x) <= SPRITE_W / 2 + 1 && y <= w.y + 11 && y >= w.y - SPRITE_H - 2;
     if (inside && (!best || w.y > best.y)) best = { id, y: w.y };
   }
   if (best) return { kind: "agent", id: best.id };

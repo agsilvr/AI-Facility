@@ -18,7 +18,7 @@ function ledgerWithPendingReply() {
 
 const room = (id: string) => rooms.find((r) => r.id === id)!;
 
-describe("room status (shared by the 2D map and the 3D facility)", () => {
+describe("room status", () => {
   it("finds the room a task is in from its workflow stage", () => {
     const { ledger, taskId } = ledgerWithPendingReply();
     expect(roomOfTask(ledger.getState(), ledger.task(taskId)!)).toBe("etsy-comms");
@@ -71,6 +71,24 @@ describe("crew positions", () => {
     expect(sharing.length).toBeGreaterThan(1);
     const xs = sharing.map((a) => targetFor(state, layout, a.id)!.x);
     expect(new Set(xs).size).toBe(xs.length);
+  });
+
+  it("stands each crew member at a workstation in their room", () => {
+    const state = initialState();
+    for (const agent of state.agents) {
+      const target = targetFor(state, layout, agent.id)!;
+      expect(layout.rooms.get(agent.roomId)!.stations).toContainEqual({ x: target.x, y: target.y });
+    }
+  });
+
+  it("lines up extra crew nearer the front when a room runs out of workstations", () => {
+    const state = initialState();
+    const crowd = state.agents.map((a) => ({ ...a, roomId: "vault" }));
+    const crowded = { ...state, agents: crowd };
+    const spots = crowd.map((a) => targetFor(crowded, layout, a.id)!);
+    const vault = layout.rooms.get("vault")!;
+    expect(spots.every((p) => contains(vault.floor, p.x, p.y))).toBe(true);
+    expect(new Set(spots.map((p) => `${p.x},${p.y}`)).size).toBe(spots.length);
   });
 
   it("has no position for an unknown crew member", () => {
