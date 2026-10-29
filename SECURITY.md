@@ -70,7 +70,8 @@ here is enforced by code and covered by tests; the tests are named so they read 
 | Restart surprise | The owner paused everything, the Mac reboots | The pause is saved and holds after restart | `server.test.ts` |
 | Another website pressing buttons | A page in another tab posts to the facility | Origin, content-type and Host checks | `server.test.ts` |
 | Data sent to the wrong AI | A buyer's message ends up at DeepSeek because Qwen was busy | Every AI stage declares its data class; the router only considers models allowed that data and waits rather than overflow; the server refuses to start if a stage has no allowed model | `models.test.ts`, `policy.test.ts`, `ledger.test.ts` |
-| Image or overflow bills | Designs or overflow research run up a bill | Each paid model has its own monthly cap on top of the wing budget; designs fall back to free type-only designs | `models.test.ts`, `ledger.test.ts` |
+| Surprise bills | Overflow research runs up a bill | Subscriptions and the local model only, plus DeepSeek on prepaid credits with its own monthly cap on top of the wing budget | `models.test.ts`, `ledger.test.ts` |
+| Borrowed logins | Code calls a provider directly with the token a subscription app saved | Never built: subscriptions are used only by running their official apps (rule 3) | review |
 | Supply chain | A malicious package or plugin | Few dependencies, lockfile, no third-party skills or MCP servers without review | rule 5 in `CLAUDE.md` |
 
 ## Known limits
