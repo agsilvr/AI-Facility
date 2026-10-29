@@ -8,13 +8,12 @@ import type { DataClass, Job, ModelId } from "./types";
 //   anything, but it does one job at a time.
 // - Claude, on the owner's own Claude subscription, is the senior writer: the
 //   final version of every listing and reply, and the daily briefing.
-// - DeepSeek takes research Qwen has no room for. It only ever sees public
-//   data, never the shop's plans or anything a customer wrote.
-// - Designs come from OpenAI's image model up to its monthly cap, then from
-//   type-only designs drawn in code, which cost nothing.
-//
-// Codex isn't here: it builds and maintains the facility itself, and never
-// handles the shop's work.
+// - DeepSeek takes research Qwen has no room for, on the owner's existing
+//   DeepSeek credits. It only ever sees public data, never the shop's plans or
+//   anything a customer wrote.
+// - Codex, on the owner's own ChatGPT subscription, is the designer: it draws
+//   designs as vector artwork. When it's busy, designs are type-only, drawn in
+//   code. Nothing here pays per call except DeepSeek's prepaid credits.
 
 export interface Model {
   name: string;
@@ -33,15 +32,15 @@ const ALL: DataClass[] = ["public", "shop", "customer"];
 export const MODELS: Record<ModelId, Model> = {
   qwen: { name: "Qwen 3.5 9B", where: "on this Mac", sees: ALL, capacity: 1 },
   claude: { name: "Claude", where: "your Claude subscription", sees: ALL },
-  deepseek: { name: "DeepSeek", where: "DeepSeek's servers", sees: ["public"], monthlyCapUsd: 5 },
-  "openai-image": { name: "OpenAI images", where: "OpenAI's servers", sees: ["public", "shop"], monthlyCapUsd: 15 },
+  deepseek: { name: "DeepSeek", where: "your DeepSeek credits", sees: ["public"], monthlyCapUsd: 5 },
+  codex: { name: "Codex", where: "your ChatGPT subscription", sees: ["public", "shop"], capacity: 1 },
   typeset: { name: "Type designs", where: "drawn in code on this Mac", sees: ALL },
 };
 
 /** Who may do each job, first choice first; the rest take over when it's full or out of budget. */
 export const ROUTES: Record<Job, ModelId[]> = {
   research: ["qwen", "deepseek"],
-  design: ["openai-image", "typeset"],
+  design: ["codex", "typeset"],
   write: ["claude"],
   brief: ["claude"],
 };

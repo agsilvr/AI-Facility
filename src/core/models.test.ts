@@ -14,7 +14,7 @@ describe("model router", () => {
     }
   });
 
-  it("keeps customer data away from every outside image model", () => {
+  it("keeps customer data away from the designer", () => {
     expect(allowedModels("design", "customer")).toEqual(["typeset"]);
   });
 
@@ -31,9 +31,14 @@ describe("model router", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("switches to type-only designs once the image budget is used up", () => {
-    expect(route("design", "public", idle)).toEqual({ ok: true, model: "openai-image" });
-    expect(route("design", "public", { busy: {}, spent: { "openai-image": 15 } })).toEqual({ ok: true, model: "typeset" });
+  it("has Codex design, and makes type-only designs while it's busy", () => {
+    expect(route("design", "public", idle)).toEqual({ ok: true, model: "codex" });
+    expect(route("design", "public", { busy: { codex: 1 }, spent: {} })).toEqual({ ok: true, model: "typeset" });
+  });
+
+  it("uses no pay-per-call model except DeepSeek's prepaid credits", () => {
+    const capped = (Object.keys(MODELS) as (keyof typeof MODELS)[]).filter((id) => MODELS[id].monthlyCapUsd !== undefined);
+    expect(capped).toEqual(["deepseek"]);
   });
 
   it("waits, and says why, when every allowed model is full or out of budget", () => {

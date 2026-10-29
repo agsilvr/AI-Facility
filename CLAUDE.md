@@ -34,14 +34,14 @@ Read them before every change and follow them without exception.
    remove or bypass the check in `dispatch`. AI provider keys must also have a spending cap
    set at the provider.
 3. **AI access goes through the owner's own subscriptions** (Claude Code, Codex) or a local
-   model, using the official apps signed in on the Mac, plus API keys only for DeepSeek and
-   OpenAI images, each with a monthly cap. Never build anything that extracts or reuses a
-   subscription's login tokens. Plain code picks the model for every job
-   (`src/core/models.ts`), never an AI: Qwen on the Mac for research, Claude for writing and
-   briefings, DeepSeek for public research overflow, OpenAI images then type-only designs
-   for artwork. Every AI stage declares its data class, and a model only ever sees the data
-   classes it's allowed (DeepSeek sees public data only). Codex builds the facility; it
-   never does the shop's work.
+   model, using the official apps signed in on the Mac. The only API key is DeepSeek's, on
+   the owner's prepaid credits, with a monthly cap; no other pay-per-call APIs. Never build
+   anything that extracts or reuses a subscription's login tokens. Plain code picks the model
+   for every job (`src/core/models.ts`), never an AI: Qwen on the Mac for research, Claude
+   for writing and briefings, DeepSeek for public research overflow, Codex for designs (with
+   type-only designs when it's busy). Every AI stage declares its data class, and a model
+   only ever sees the data classes it's allowed (DeepSeek sees public data only). Codex also
+   builds the facility.
 4. **Secrets never enter the repository.** API keys and tokens live in the macOS Keychain or a
    git-ignored `.env` file. Never log them, never send them to the browser, never pass them to
    an AI reader's environment.

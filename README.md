@@ -14,9 +14,9 @@ Anything that needs you lights up red, and nothing goes out to customers or the 
 without your approval.
 
 **The crew's models.** Research runs on Qwen 3.5 9B on the Mac, with DeepSeek taking public
-research when Qwen is busy. Claude writes every listing, reply and daily briefing. Designs
-come from OpenAI's image model up to a monthly cap, then from type-only designs drawn in
-code. The Crew tab shows which model each crew member is using and what each has spent.
+research when Qwen is busy. Claude writes every listing, reply and daily briefing. Codex, on
+your ChatGPT subscription, draws the designs, with type-only designs drawn in code when it's
+busy. DeepSeek runs on your existing credits; nothing else pays per call. The Crew tab shows which model each crew member is using and what each has spent.
 
 **Status: Phase 2 (local server, demo crew).** The facility runs as a background service on
 the Mac mini, keeps its data in a local database, and carries on when the browser is closed.

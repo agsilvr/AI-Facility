@@ -57,7 +57,7 @@ export type Job = "research" | "design" | "write" | "brief";
 export type DataClass = "public" | "shop" | "customer";
 
 /** The models the facility's crew think with. */
-export type ModelId = "qwen" | "claude" | "deepseek" | "openai-image" | "typeset";
+export type ModelId = "qwen" | "claude" | "deepseek" | "codex" | "typeset";
 
 /** Outward actions the facility knows how to perform. */
 export type ActionId = "etsy.publishListing" | "etsy.sendReply" | "internal.fileBriefing";
