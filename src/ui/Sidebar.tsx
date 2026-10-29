@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { APPROVAL_TTL_MS, completedCount, completedKey } from "../core/ledger";
+import { MODELS } from "../core/models";
 import type { FacilityPort } from "../core/port";
-import type { Draft, FacilityState, Flag } from "../core/types";
+import type { DataClass, Draft, FacilityState, Flag, ModelId } from "../core/types";
 import type { Selection } from "../facility/status";
 import { money, stageLabel, timeAgo } from "./format";
 
@@ -191,7 +192,9 @@ function Flow({ state }: { state: FacilityState }) {
                               <div className="mini-meter"><div style={{ width: `${t.progress * 100}%` }} /></div>
                             )}
                             {t.state === "awaiting_approval" && <span className="pill alert">Needs you</span>}
-                            {t.state === "queued" && <span className="pill">Queued</span>}
+                            {t.state === "queued" && (
+                              <span className="pill" title={t.waiting}>{t.waiting ? "Waiting" : "Queued"}</span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -212,29 +215,65 @@ function Flow({ state }: { state: FacilityState }) {
 
 function Crew({ ledger, state, onSelect }: { ledger: FacilityPort; state: FacilityState; onSelect: (s: Selection) => void }) {
   return (
-    <ul className="cards">
-      {state.agents.map((a) => {
-        const task = a.taskId ? state.tasks.find((t) => t.id === a.taskId) : null;
-        const room = state.rooms.find((r) => r.id === a.roomId);
-        return (
-          <li key={a.id} className="card crew-card">
-            <button className="crew-main" onClick={() => onSelect({ kind: "agent", id: a.id })}>
-              <span className="swatch" style={{ background: a.sprite.suit }} />
-              <span>
-                <strong>{a.name}</strong> <span className="muted">{a.role}</span>
-                <br />
-                <span className={`status ${a.status}`}>{a.status}</span>
-                <span className="muted"> · {room?.name}</span>
-                {task && <span className="muted"> · {task.title}</span>}
-              </span>
-            </button>
-            <button onClick={() => ledger.setAgentPaused(a.id, a.status !== "paused")}>
-              {a.status === "paused" ? "Resume" : "Pause"}
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      <ul className="cards">
+        {state.agents.map((a) => {
+          const task = a.taskId ? state.tasks.find((t) => t.id === a.taskId) : null;
+          const room = state.rooms.find((r) => r.id === a.roomId);
+          return (
+            <li key={a.id} className="card crew-card">
+              <button className="crew-main" onClick={() => onSelect({ kind: "agent", id: a.id })}>
+                <span className="swatch" style={{ background: a.sprite.suit }} />
+                <span>
+                  <strong>{a.name}</strong> <span className="muted">{a.role}</span>
+                  <br />
+                  <span className={`status ${a.status}`}>{a.status}</span>
+                  <span className="muted"> · {room?.name}</span>
+                  {task && <span className="muted"> · {task.title}</span>}
+                  {task?.model && <span className="model-tag"> · {MODELS[task.model].name}</span>}
+                </span>
+              </button>
+              <button onClick={() => ledger.setAgentPaused(a.id, a.status !== "paused")}>
+                {a.status === "paused" ? "Resume" : "Pause"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <Models state={state} />
+    </>
+  );
+}
+
+const SEES: Record<DataClass, string> = { public: "public info", shop: "your shop's plans", customer: "customer messages" };
+
+/** The models behind the crew: where each one runs, what it may see, and what it has spent this month. */
+function Models({ state }: { state: FacilityState }) {
+  return (
+    <section className="models">
+      <h3>Models</h3>
+      {/* Matches the demo label in the top bar: until real models are connected, the crew is simulated. */}
+      <p className="muted">Demo mode: the crew is simulated, so no model is really called yet.</p>
+      <ul>
+        {(Object.keys(MODELS) as ModelId[]).map((id) => {
+          const m = MODELS[id];
+          const busy = state.tasks.filter((t) => t.state === "active" && t.model === id).length;
+          const spent = state.modelSpend[id] ?? 0;
+          return (
+            <li key={id}>
+              <div className="card-head">
+                <strong>{m.name}</strong>
+                <span className="muted">{busy ? `${busy} working` : "idle"}</span>
+              </div>
+              <span className="muted">{m.where} · sees {m.sees.map((d) => SEES[d]).join(", ")}</span>
+              {m.monthlyCapUsd !== undefined && (
+                <span className="muted"> · {money(spent)} of {money(m.monthlyCapUsd)} this month</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -263,7 +302,10 @@ export function Inspector({ state, selection, onClose }: { state: FacilityState;
       <>
         <p><span className={`status ${a.status}`}>{a.status}</span> in {state.rooms.find((r) => r.id === a.roomId)?.name}</p>
         {task ? (
-          <p>Working on <strong>{task.title}</strong> ({stageLabel(state, task)}, {Math.round(task.progress * 100)}%)</p>
+          <>
+            <p>Working on <strong>{task.title}</strong> ({stageLabel(state, task)}, {Math.round(task.progress * 100)}%)</p>
+            {task.model && <p className="muted">Thinking with {MODELS[task.model].name}, {MODELS[task.model].where}</p>}
+          </>
         ) : (
           <p className="muted">No current task.</p>
         )}

@@ -1,3 +1,4 @@
+import { allowedModels, ROUTES } from "./models";
 import type { Wing } from "./types";
 
 /**
@@ -9,8 +10,10 @@ import type { Wing } from "./types";
  *   what the owner approved is exactly what the action uses.
  * - An approval stage is never the last stage of a workflow that has no action
  *   (that would be an approval that does nothing, which hides mistakes).
+ * - Every other stage says what kind of work it is and how sensitive its data
+ *   is, and at least one model is allowed to do that work with that data.
  */
-export function workflowViolations(wings: Wing[]): string[] {
+export function workflowViolations(wings: Wing[], routes = ROUTES): string[] {
   const problems: string[] = [];
   for (const wing of wings) {
     for (const wf of wing.workflows) {
@@ -23,6 +26,12 @@ export function workflowViolations(wings: Wing[]): string[] {
         }
         if (stage.needsApproval && !wf.stages[i + 1]?.action) {
           problems.push(`${where}: an approval stage must be followed by the action it approves`);
+        }
+        if (!stage.action) {
+          if (!stage.job || !stage.data) problems.push(`${where}: an AI stage must say its job and its data class`);
+          else if (allowedModels(stage.job, stage.data, routes).length === 0) {
+            problems.push(`${where}: no model is allowed to do ${stage.job} work with ${stage.data} data`);
+          }
         }
       });
     }

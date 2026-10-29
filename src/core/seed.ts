@@ -15,7 +15,7 @@ export const wings: Wing[] = [
       {
         id: "briefing",
         label: "Daily briefing",
-        stages: [{ id: "brief", label: "Compile briefing", roomId: "command" }],
+        stages: [{ id: "brief", label: "Compile briefing", roomId: "command", job: "brief", data: "shop" }],
       },
     ],
   },
@@ -29,9 +29,9 @@ export const wings: Wing[] = [
         id: "listing",
         label: "New product",
         stages: [
-          { id: "research", label: "Research trend", roomId: "etsy-lab" },
-          { id: "design", label: "Design product", roomId: "etsy-studio" },
-          { id: "list", label: "Draft listing", roomId: "etsy-factory", needsApproval: true },
+          { id: "research", label: "Research trend", roomId: "etsy-lab", job: "research", data: "public" },
+          { id: "design", label: "Design product", roomId: "etsy-studio", job: "design", data: "public" },
+          { id: "list", label: "Draft listing", roomId: "etsy-factory", needsApproval: true, job: "write", data: "shop" },
           { id: "publish", label: "Publish to shop", roomId: "dock", action: "etsy.publishListing" },
         ],
       },
@@ -39,7 +39,7 @@ export const wings: Wing[] = [
         id: "message",
         label: "Customer message",
         stages: [
-          { id: "reply", label: "Draft reply", roomId: "etsy-comms", needsApproval: true },
+          { id: "reply", label: "Draft reply", roomId: "etsy-comms", needsApproval: true, job: "write", data: "customer" },
           { id: "send", label: "Send reply", roomId: "etsy-comms", action: "etsy.sendReply" },
         ],
       },
@@ -101,6 +101,7 @@ export function initialState(): FacilityState {
       { id: "log-boot", at: Date.now(), wingId: null, level: "success", text: "Facility online. All crew reporting for duty." },
     ],
     spend: { core: 0, etsy: 0, expansion: 0 },
+    modelSpend: {},
     spendMonth: monthKey(Date.now()),
     completed: {},
   };

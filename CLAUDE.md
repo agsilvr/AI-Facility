@@ -34,10 +34,14 @@ Read them before every change and follow them without exception.
    remove or bypass the check in `dispatch`. AI provider keys must also have a spending cap
    set at the provider.
 3. **AI access goes through the owner's own subscriptions** (Claude Code, Codex) or a local
-   model, using the official apps signed in on the Mac. Never build anything that extracts
-   or reuses a subscription's login tokens. Cheap or private work goes to the local model;
-   customer data never goes to providers the owner hasn't approved for it (DeepSeek is not
-   approved for customer data).
+   model, using the official apps signed in on the Mac, plus API keys only for DeepSeek and
+   OpenAI images, each with a monthly cap. Never build anything that extracts or reuses a
+   subscription's login tokens. Plain code picks the model for every job
+   (`src/core/models.ts`), never an AI: Qwen on the Mac for research, Claude for writing and
+   briefings, DeepSeek for public research overflow, OpenAI images then type-only designs
+   for artwork. Every AI stage declares its data class, and a model only ever sees the data
+   classes it's allowed (DeepSeek sees public data only). Codex builds the facility; it
+   never does the shop's work.
 4. **Secrets never enter the repository.** API keys and tokens live in the macOS Keychain or a
    git-ignored `.env` file. Never log them, never send them to the browser, never pass them to
    an AI reader's environment.
@@ -100,8 +104,8 @@ Read them before every change and follow them without exception.
 - `server/agents/`: the locked-down AI reader.
 - `scripts/`: macOS service install and uninstall.
 - `src/client/`: the browser's connection to the server.
-- `src/core/`: types, ledger, dispatch, safety checks, workflow policy, seed data (wings,
-  rooms, agents, workflows).
+- `src/core/`: types, ledger, dispatch, the model router (`models`), safety checks, workflow
+  policy, seed data (wings, rooms, agents, workflows).
 - `src/sim/`: demo mode with simulated agents and canned output.
 - `src/facility/`: the map: `layout` (floor plan: a main hall with rooms on both sides; the
   core in the middle with the Command Center at its heart, each business a district beside it

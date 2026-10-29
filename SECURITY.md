@@ -69,6 +69,8 @@ here is enforced by code and covered by tests; the tests are named so they read 
 | Cover-ups | Someone edits the record of what an AI did | Append-only audit table; the database refuses updates and deletes | `server.test.ts` |
 | Restart surprise | The owner paused everything, the Mac reboots | The pause is saved and holds after restart | `server.test.ts` |
 | Another website pressing buttons | A page in another tab posts to the facility | Origin, content-type and Host checks | `server.test.ts` |
+| Data sent to the wrong AI | A buyer's message ends up at DeepSeek because Qwen was busy | Every AI stage declares its data class; the router only considers models allowed that data and waits rather than overflow; the server refuses to start if a stage has no allowed model | `models.test.ts`, `policy.test.ts`, `ledger.test.ts` |
+| Image or overflow bills | Designs or overflow research run up a bill | Each paid model has its own monthly cap on top of the wing budget; designs fall back to free type-only designs | `models.test.ts`, `ledger.test.ts` |
 | Supply chain | A malicious package or plugin | Few dependencies, lockfile, no third-party skills or MCP servers without review | rule 5 in `CLAUDE.md` |
 
 ## Known limits
