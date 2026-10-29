@@ -382,6 +382,39 @@ button.primary {
   gap: 8px;
 }
 
+.model-tag {
+  color: var(--accent);
+}
+
+/* The models behind the crew, under the crew list. */
+.models {
+  margin-top: 18px;
+}
+
+.models h3 {
+  font-size: 12px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.models ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.models li {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  line-height: 1.5;
+}
+
 .crew-main {
   display: flex;
   gap: 10px;

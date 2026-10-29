@@ -7,7 +7,7 @@ function wingWith(stages: Stage[]): Wing[] {
   return [{ id: "test", name: "Test", color: "#fff", budgetMonthly: 1, workflows: [{ id: "wf", label: "WF", stages }] }];
 }
 
-const work = (id: string): Stage => ({ id, label: id, roomId: "r" });
+const work = (id: string): Stage => ({ id, label: id, roomId: "r", job: "write", data: "shop" });
 
 describe("workflow policy", () => {
   it("accepts the real facility's workflows", () => {
@@ -44,5 +44,16 @@ describe("workflow policy", () => {
 
   it("refuses to start with an unsafe workflow", () => {
     expect(() => assertSafeWorkflows(wingWith([{ ...work("send"), action: "etsy.publishListing" }]))).toThrow(/Unsafe workflow/);
+  });
+
+  it("refuses an AI stage that doesn't say its job and data", () => {
+    const problems = workflowViolations(wingWith([{ id: "think", label: "Think", roomId: "r" }]));
+    expect(problems.join()).toContain("must say its job and its data class");
+  });
+
+  it("refuses a stage no model may do, such as customer data with only DeepSeek allowed", () => {
+    const routes = { research: ["deepseek" as const], design: [], write: [], brief: [] };
+    const problems = workflowViolations(wingWith([{ ...work("read"), job: "research", data: "customer" }]), routes);
+    expect(problems.join()).toContain("no model is allowed to do research work with customer data");
   });
 });

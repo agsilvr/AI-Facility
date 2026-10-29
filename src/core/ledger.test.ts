@@ -160,4 +160,62 @@ describe("Ledger", () => {
     expect(completedCount(state)).toBe(70);
     expect(state.tasks.filter((t) => t.state === "done").length).toBe(60);
   });
+
+  describe("model routing", () => {
+    it("records the model working on each stage, and frees it when the stage ends", () => {
+      const ledger = setup();
+      const task = ledger.createTask("etsy", "listing", "Moon print");
+      dispatch(ledger);
+      expect(ledger.task(task.id)?.model).toBe("qwen");
+      expect(ledger.getState().log[0].text).toContain("(Qwen 3.5 9B)");
+      ledger.work(task.id, 1, 0.25);
+      expect(ledger.getState().modelSpend.qwen).toBe(0.25);
+      ledger.finishStage(task.id, "done");
+      expect(ledger.task(task.id)?.model).toBeUndefined();
+      expect(ledger.load().busy.qwen ?? 0).toBe(0);
+    });
+
+    it("sends a second research job to DeepSeek while Qwen is busy, and holds one when neither can take it", () => {
+      const base = initialState();
+      // Scout is the only researcher, so give the wing a second one for this test.
+      const scout = base.agents.find((a) => a.id === "scout")!;
+      const ledger = new Ledger({ ...base, agents: [...base.agents, { ...scout, id: "scout-2" }] }, () => 5_000);
+      const a = ledger.createTask("etsy", "listing", "A");
+      const b = ledger.createTask("etsy", "listing", "B");
+      dispatch(ledger);
+      expect(ledger.task(a.id)?.model).toBe("qwen");
+      expect(ledger.task(b.id)?.model).toBe("deepseek");
+
+      // DeepSeek uses up its monthly cap while Qwen is still busy.
+      ledger.work(b.id, 1, 5);
+      ledger.finishStage(b.id, "done");
+      const c = ledger.createTask("etsy", "listing", "C");
+      dispatch(ledger);
+      dispatch(ledger);
+      expect(ledger.task(c.id)?.state).toBe("queued");
+      expect(ledger.task(c.id)?.waiting).toContain("Waiting for Qwen 3.5 9B and DeepSeek");
+      // Said once, not on every dispatch.
+      expect(ledger.getState().log.filter((e) => e.text.includes("Waiting for")).length).toBe(1);
+    });
+
+    it("starts each model's monthly spend afresh with the new month", () => {
+      let now = Date.UTC(2026, 0, 31);
+      const ledger = new Ledger(initialState(), () => now);
+      const task = ledger.createTask("etsy", "listing", "Moon print");
+      dispatch(ledger);
+      ledger.work(task.id, 0.1, 1);
+      expect(ledger.getState().modelSpend.qwen).toBe(1);
+      now = Date.UTC(2026, 1, 1);
+      expect(ledger.load().spent).toEqual({});
+    });
+
+    it("puts interrupted work back in the queue without a model after a restart", () => {
+      const ledger = setup();
+      const task = ledger.createTask("etsy", "listing", "Moon print");
+      dispatch(ledger);
+      const recovered = Ledger.recover(ledger.getState());
+      expect(recovered.tasks.find((t) => t.id === task.id)?.model).toBeUndefined();
+    });
+  });
 });
+

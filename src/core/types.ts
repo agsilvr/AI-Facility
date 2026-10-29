@@ -40,7 +40,24 @@ export interface Stage {
    * exact content the owner approved. See src/core/policy.ts.
    */
   action?: ActionId;
+  /** The kind of thinking this stage needs; the router picks the model (see models.ts). Every stage but an action has one. */
+  job?: Job;
+  /** The most sensitive data this stage works on, which limits the models allowed to see it. */
+  data?: DataClass;
 }
+
+/** Kinds of AI work. Each has a list of models that may do it, in order of preference. */
+export type Job = "research" | "design" | "write" | "brief";
+
+/**
+ * How sensitive a stage's data is. "public" is anything on the open web,
+ * "shop" is the business's own plans and listings, and "customer" is anything
+ * a buyer wrote or anything that names them.
+ */
+export type DataClass = "public" | "shop" | "customer";
+
+/** The models the facility's crew think with. */
+export type ModelId = "qwen" | "claude" | "deepseek" | "openai-image" | "typeset";
 
 /** Outward actions the facility knows how to perform. */
 export type ActionId = "etsy.publishListing" | "etsy.sendReply" | "internal.fileBriefing";
@@ -114,6 +131,10 @@ export interface Task {
   approvedContent?: string;
   /** When the owner approved it. An approval is good for APPROVAL_TTL_MS, and for one action. */
   approvedAt?: number;
+  /** The model working on the current stage, chosen by the router when the stage started. */
+  model?: ModelId;
+  /** Why the task can't start its next stage yet, e.g. a model's monthly cap is used up. */
+  waiting?: string;
 }
 
 export interface ListingDraft {
@@ -175,6 +196,8 @@ export interface FacilityState {
   log: LogEntry[];
   /** Spend this month per wing, in dollars. */
   spend: Record<WingId, number>;
+  /** Spend this month per model, in dollars, for the models with their own monthly cap. */
+  modelSpend: Partial<Record<ModelId, number>>;
   /** Calendar month the spend figures belong to, as "YYYY-MM" (UTC). */
   spendMonth: string;
   /** Finished tasks ever, keyed "wingId/workflowId". Old finished tasks are pruned from `tasks`. */

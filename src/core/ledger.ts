@@ -1,3 +1,4 @@
+import { MODELS, route, type Load } from "./models";
 import { checkDraft, hasBlockingFlag, serializeDraft } from "./safety";
 import type {
   Agent,
@@ -69,9 +70,10 @@ export class Ledger {
       ...saved,
       tasks: saved.tasks.map((t) => {
         const withFlags = { ...t, flags: t.flags ?? [] };
-        return t.state === "active" ? { ...withFlags, state: "queued", agentId: null, progress: 0 } : withFlags;
+        return t.state === "active" ? { ...withFlags, state: "queued", agentId: null, progress: 0, model: undefined } : withFlags;
       }),
       approvals: saved.approvals.map((a) => ({ ...a, flags: a.flags ?? [] })),
+      modelSpend: saved.modelSpend ?? {},
       agents: saved.agents.map((a) =>
         a.status === "paused" ? { ...a, taskId: null } : { ...a, status: "idle", taskId: null },
       ),
@@ -114,7 +116,7 @@ export class Ledger {
   private rollMonth() {
     const month = monthKey(this.now());
     if (month === this.state.spendMonth) return;
-    this.commit({ ...this.state, spend: {}, spendMonth: month });
+    this.commit({ ...this.state, spend: {}, modelSpend: {}, spendMonth: month });
     this.log(`New month (${month}). Budgets reset.`);
   }
 
@@ -163,9 +165,29 @@ export class Ledger {
       this.sendBackUnapproved(task, stage.label);
       return;
     }
-    this.patchTask(taskId, { state: "active", agentId, progress: 0 });
+    // AI stages get their model from the router. Without a data class, assume
+    // the most sensitive, so a stage someone forgot to label stays private.
+    const picked = stage.job ? route(stage.job, stage.data ?? "customer", this.load()) : null;
+    if (picked && !picked.ok) {
+      if (task.waiting !== picked.reason) {
+        this.patchTask(taskId, { waiting: picked.reason });
+        this.log(`${task.title}: ${picked.reason}.`, "warning", task.wingId);
+      }
+      return;
+    }
+    const model = picked?.model;
+    this.patchTask(taskId, { state: "active", agentId, progress: 0, model, waiting: undefined });
     this.patchAgent(agentId, { status: "working", taskId, roomId: stage.roomId });
-    this.log(`${agent.name} started "${stage.label}" on ${task.title}`, "info", task.wingId);
+    const using = model ? ` (${MODELS[model].name})` : "";
+    this.log(`${agent.name} started "${stage.label}" on ${task.title}${using}`, "info", task.wingId);
+  }
+
+  /** How busy each model is and what it has spent this month, for the router. */
+  load(): Load {
+    this.rollMonth();
+    const busy: Load["busy"] = {};
+    for (const t of this.state.tasks) if (t.state === "active" && t.model) busy[t.model] = (busy[t.model] ?? 0) + 1;
+    return { busy, spent: this.state.modelSpend };
   }
 
   /** Record work done on an active task. Returns true when the stage is finished. */
@@ -175,9 +197,13 @@ export class Ledger {
     this.rollMonth();
     const progress = Math.min(1, task.progress + amount);
     this.patchTask(taskId, { progress, cost: task.cost + cost });
+    // A model's cap is checked when a stage starts, so one stage can take it
+    // just past the cap; the next stage waits or goes to the next model.
+    const modelSpend = task.model ? { ...this.state.modelSpend, [task.model]: (this.state.modelSpend[task.model] ?? 0) + cost } : this.state.modelSpend;
     this.commit({
       ...this.state,
       spend: { ...this.state.spend, [task.wingId]: (this.state.spend[task.wingId] ?? 0) + cost },
+      modelSpend,
     });
     return progress >= 1;
   }
@@ -228,7 +254,7 @@ export class Ledger {
     this.releaseAgent(task.agentId);
     // Any new output invalidates an earlier approval.
     const changed = output.draft !== undefined;
-    this.patchTask(taskId, { draft, flags, ...(changed ? { approvedContent: undefined } : {}) });
+    this.patchTask(taskId, { draft, flags, model: undefined, ...(changed ? { approvedContent: undefined } : {}) });
 
     if (stage.needsApproval) {
       const approval: Approval = {
@@ -319,6 +345,7 @@ export class Ledger {
       stageIndex: Math.max(0, task.stageIndex - 1),
       approvedContent: undefined,
       approvedAt: undefined,
+      model: undefined,
     });
     this.log(`Blocked "${label}" on ${task.title}: it no longer matches a current approval from you. Sent back for review.`, "warning", task.wingId);
   }
