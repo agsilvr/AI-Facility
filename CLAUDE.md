@@ -98,5 +98,7 @@ Read them before every change and follow them without exception.
   rooms, agents, workflows).
 - `src/sim/`: demo mode with simulated agents and canned output.
 - `src/facility/`: map layout, movement, room status and the 2D canvas renderer.
-- `src/facility3d/`: the 3D facility (scene, rooms, crew, camera and quality helpers).
+- `src/facility3d/`: the 3D facility: `scene` (camera, controls, frame loop), `base` (ground,
+  pit, levels, lifts, dock), `rooms`, `crew`, `motion` (where the crew walk), `coords`
+  (level geometry and lift rides) and `view` (camera framing and quality).
 - `src/ui/`: top bar, sidebar panels (Needs you, Task flow, Crew, Log) and inspector.
