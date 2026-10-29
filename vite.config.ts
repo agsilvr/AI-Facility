@@ -7,6 +7,4 @@ export default defineConfig({
   server: {
     proxy: { "/api": "http://127.0.0.1:8787" },
   },
-  // The 3D engine (three.js) is one ~630 kB chunk, loaded from this Mac on demand.
-  build: { chunkSizeWarningLimit: 700 },
 });

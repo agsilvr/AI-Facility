@@ -175,12 +175,20 @@ button.primary {
   overflow: auto;
 }
 
+.facility-wrap {
+  position: relative;
+}
+
 .facility-wrap canvas {
   display: block;
-  border-radius: 10px;
-  border: 1px solid var(--border);
+  border: 2px solid #343a5e;
   image-rendering: pixelated;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+}
+
+.facility-wrap canvas:active {
+  cursor: grabbing;
 }
 
 .sidebar {
@@ -545,93 +553,79 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.view-switch {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.view-switch button.active {
-  background: #0369a1;
-  border-color: #0284c7;
-}
-
-.facility-3d {
-  position: relative;
-}
-
-.facility-3d canvas {
-  display: block;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  cursor: grab;
-  touch-action: none;
-}
-
-.facility-3d canvas:active {
-  cursor: grabbing;
-}
-
-.view-levels {
+/* The map's buttons, tooltip and hint sit over the canvas, in a chunky retro style. */
+.map-buttons {
   position: absolute;
   top: 12px;
   left: 12px;
+  right: 12px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-width: calc(100% - 24px);
+  pointer-events: none;
 }
 
-.view-levels button {
-  background: rgba(2, 6, 23, 0.78);
-  backdrop-filter: blur(4px);
+.map-buttons button {
+  pointer-events: auto;
+  background: #0b0a10;
+  border: 2px solid #4a5282;
+  border-radius: 0;
+  box-shadow: 2px 2px 0 #000;
   font-size: 12px;
-  padding: 5px 9px;
+  padding: 4px 9px;
 }
 
-.view-tip {
+.map-buttons button:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #000;
+}
+
+.map-zoom {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.map-zoom button {
+  width: 30px;
+  padding: 4px 0;
+}
+
+.map-tip {
   position: absolute;
   transform: translate(14px, -130%);
-  padding: 5px 9px;
-  border-radius: 6px;
-  border: 1px solid var(--accent);
-  background: rgba(2, 6, 23, 0.92);
+  padding: 4px 8px;
+  border: 2px solid #4a5282;
+  background: #0b0a10;
   font-size: 12px;
   white-space: nowrap;
   pointer-events: none;
   z-index: 2;
 }
 
-@media (max-width: 700px) {
-  .view-level-name {
-    display: none;
-  }
-}
-
-.view-hint-touch {
+.map-hint-touch {
   display: none;
 }
 
 /* Phones and tablets get the touch gestures instead of mouse ones. */
 @media (pointer: coarse), (max-width: 700px) {
-  .view-hint-wide {
+  .map-hint-wide {
     display: none;
   }
-  .view-hint-touch {
+  .map-hint-touch {
     display: inline;
   }
 }
 
-.view-hint {
+.map-hint {
   position: absolute;
   left: 50%;
   bottom: 12px;
   transform: translateX(-50%);
   margin: 0;
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: rgba(2, 6, 23, 0.8);
+  padding: 5px 10px;
+  border: 2px solid #343a5e;
+  background: #0b0a10;
   color: var(--muted);
   font-size: 11px;
   pointer-events: none;

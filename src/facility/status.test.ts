@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { dispatch } from "../core/dispatch";
 import { Ledger } from "../core/ledger";
 import { initialState, rooms } from "../core/seed";
-import { buildLayout } from "./layout";
+import { buildLayout, contains } from "./layout";
 import { pendingApprovals, roomNeedsAttention, roomOfTask, tasksInRoom } from "./status";
 import { targetFor } from "./targets";
 
@@ -60,10 +60,8 @@ describe("crew positions", () => {
     for (const agent of state.agents) {
       const target = targetFor(state, layout, agent.id)!;
       const rl = layout.rooms.get(agent.roomId)!;
-      expect(target.y).toBe(rl.floorY);
-      expect(target.level).toBe(rl.level);
-      expect(target.x).toBeGreaterThan(rl.rect.x);
-      expect(target.x).toBeLessThan(rl.rect.x + rl.rect.w);
+      expect(target.roomId).toBe(agent.roomId);
+      expect(contains(rl.floor, target.x, target.y)).toBe(true);
     }
   });
 

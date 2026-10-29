@@ -74,12 +74,12 @@ Read them before every change and follow them without exception.
 
 ## Engineering rules
 
-- TypeScript strict mode, React for the UI. The facility is drawn in 3D with three.js in
-  `src/facility3d/`, with the 2D canvas map in `src/facility/` as the fallback. Both read the
-  same layout and the same room status (`src/facility/status.ts`), so they can't disagree.
-  Keep it dependency-light; justify every new package. three.js is the one rendering
-  dependency: pinned to an exact version, bundled locally, and loaded only for the 3D view.
-  Textures and fonts are generated in code; nothing is fetched at runtime.
+- TypeScript strict mode, React for the UI. The facility is one pixel-art map, seen from
+  above, drawn on a canvas in `src/facility/`. There is one map, not several views of it.
+  Keep it dependency-light; justify every new package (there is no rendering library).
+  All art, sprites and the pixel font are drawn in code; nothing is fetched at runtime.
+- Every room's look comes from its `kind` (and a factory's `theme`) in `src/facility/rooms.ts`.
+  Anything a room shows as live (screens, items on a belt, crates) must come from the ledger.
 - `npm run typecheck`, `npm test` and `npm run build` must pass before any commit. CI runs
   them on every pull request.
 - Every behaviour change comes with a test. Ledger and dispatch logic must stay fully covered.
@@ -97,8 +97,8 @@ Read them before every change and follow them without exception.
 - `src/core/`: types, ledger, dispatch, safety checks, workflow policy, seed data (wings,
   rooms, agents, workflows).
 - `src/sim/`: demo mode with simulated agents and canned output.
-- `src/facility/`: map layout, movement, room status and the 2D canvas renderer.
-- `src/facility3d/`: the 3D facility: `scene` (camera, controls, frame loop), `base` (ground,
-  pit, levels, lifts, dock), `rooms`, `crew`, `motion` (where the crew walk), `coords`
-  (level geometry and lift rides) and `view` (camera framing and quality).
+- `src/facility/`: the map: `layout` (floor plan: a main hall with rooms on both sides, one
+  district per wing), `movement` (how the crew walk), `camera` (pan and zoom), `status`
+  (what each room shows), `pixels` (palette, font, crew sprites), `rooms` (each kind of room),
+  `render` (draws it all) and `FacilityView` (the canvas and its controls).
 - `src/ui/`: top bar, sidebar panels (Needs you, Task flow, Crew, Log) and inspector.
