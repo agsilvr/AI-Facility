@@ -1,3 +1,4 @@
+import { completedCount } from "../core/ledger";
 import type { Agent, FacilityState, Room, RoomKind, Wing } from "../core/types";
 import { WORLD_W, type FacilityLayout, type Rect } from "./layout";
 import type { Walker } from "./movement";
@@ -154,7 +155,7 @@ function drawRoomFurniture(
     }
     case "vault": {
       // Finished work stacks up as crates.
-      const done = state.tasks.filter((x) => x.state === "done").length;
+      const done = completedCount(state);
       const shown = Math.min(done, 36);
       for (let i = 0; i < shown; i++) {
         const col = i % 9;

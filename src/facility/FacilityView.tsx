@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { Ledger } from "../core/ledger";
+import type { FacilityPort } from "../core/port";
 import type { FacilityState } from "../core/types";
 import { buildLayout, contains, WORLD_W, type FacilityLayout } from "./layout";
 import { step, type Target, type Walker } from "./movement";
 import { drawFacility, type Selection } from "./render";
 
 interface Props {
-  ledger: Ledger;
+  ledger: FacilityPort;
   selection: Selection | null;
   onSelect: (selection: Selection | null) => void;
 }

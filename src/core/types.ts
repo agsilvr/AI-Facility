@@ -73,7 +73,7 @@ export interface SpriteLook {
   visor: string;
 }
 
-export type TaskState = "queued" | "active" | "awaiting_approval" | "done" | "rejected";
+export type TaskState = "queued" | "active" | "awaiting_approval" | "done";
 
 export interface Task {
   id: TaskId;
@@ -124,4 +124,8 @@ export interface FacilityState {
   log: LogEntry[];
   /** Spend this month per wing, in dollars. */
   spend: Record<WingId, number>;
+  /** Calendar month the spend figures belong to, as "YYYY-MM" (UTC). */
+  spendMonth: string;
+  /** Finished tasks ever, keyed "wingId/workflowId". Old finished tasks are pruned from `tasks`. */
+  completed: Record<string, number>;
 }

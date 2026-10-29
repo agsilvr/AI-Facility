@@ -51,6 +51,9 @@ const STAGE_NOTES: Record<string, string[]> = {
   brief: ["Briefing: sales steady, 2 items waiting for you, budget on track"],
 };
 
+// Don't pile up work faster than the owner can review it.
+const MAX_BACKLOG = 6;
+
 function pick<T>(items: T[], rand: () => number): T {
   return items[Math.floor(rand() * items.length)];
 }
@@ -89,16 +92,21 @@ export class DemoSimulation {
     };
   }
 
+  /** Unfinished work in a wing: waiting for you, queued, or in progress. */
+  private backlog(wingId: string) {
+    return this.ledger.getState().tasks.filter((t) => t.wingId === wingId && t.state !== "done").length;
+  }
+
   /** Advance the simulation by dt seconds. */
   tick(dt: number) {
     const { ledger, opts } = this;
     this.elapsed += dt;
 
-    if (this.elapsed >= this.nextIdea) {
+    if (this.elapsed >= this.nextIdea && this.backlog("etsy") < MAX_BACKLOG) {
       ledger.createTask("etsy", "listing", pick(PRODUCT_IDEAS, opts.rand));
       this.nextIdea = this.elapsed + opts.ideaEvery * (0.7 + opts.rand() * 0.6);
     }
-    if (this.elapsed >= this.nextMessage) {
+    if (this.elapsed >= this.nextMessage && this.backlog("etsy") < MAX_BACKLOG) {
       ledger.createTask("etsy", "message", pick(MESSAGES, opts.rand));
       this.nextMessage = this.elapsed + opts.messageEvery * (0.7 + opts.rand() * 0.6);
     }

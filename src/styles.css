@@ -478,3 +478,17 @@ button.primary {
     width: auto;
   }
 }
+
+.boot {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  color: var(--muted);
+}
+
+.offline-banner {
+  background: #7f1d1d;
+  color: #fee2e2;
+  padding: 8px 20px;
+  font-size: 12px;
+}

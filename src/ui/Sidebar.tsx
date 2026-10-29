@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { Ledger } from "../core/ledger";
+import { completedCount, completedKey } from "../core/ledger";
+import type { FacilityPort } from "../core/port";
 import type { FacilityState } from "../core/types";
 import type { Selection } from "../facility/render";
 import { money, stageLabel, timeAgo } from "./format";
@@ -7,7 +8,7 @@ import { money, stageLabel, timeAgo } from "./format";
 type Tab = "attention" | "flow" | "crew" | "log";
 
 interface Props {
-  ledger: Ledger;
+  ledger: FacilityPort;
   state: FacilityState;
   now: number;
   onSelect: (s: Selection) => void;
@@ -57,7 +58,7 @@ function TabButton(props: {
   );
 }
 
-function Attention({ ledger, state, now }: { ledger: Ledger; state: FacilityState; now: number }) {
+function Attention({ ledger, state, now }: { ledger: FacilityPort; state: FacilityState; now: number }) {
   const pending = state.approvals.filter((a) => a.status === "pending");
   if (pending.length === 0) {
     return <p className="empty">Nothing needs you right now. Agents will ask here before anything goes out.</p>;
@@ -96,7 +97,7 @@ function Flow({ state }: { state: FacilityState }) {
         .flatMap((wing) =>
           wing.workflows.map((wf) => {
             const tasks = state.tasks.filter((t) => t.wingId === wing.id && t.workflowId === wf.id);
-            const done = tasks.filter((t) => t.state === "done").length;
+            const done = state.completed[completedKey(wing.id, wf.id)] ?? 0;
             return (
               <section key={`${wing.id}-${wf.id}`} className="flow-section">
                 <h3 style={{ color: wing.color }}>{wing.name} · {wf.label}</h3>
@@ -136,7 +137,7 @@ function Flow({ state }: { state: FacilityState }) {
   );
 }
 
-function Crew({ ledger, state, onSelect }: { ledger: Ledger; state: FacilityState; onSelect: (s: Selection) => void }) {
+function Crew({ ledger, state, onSelect }: { ledger: FacilityPort; state: FacilityState; onSelect: (s: Selection) => void }) {
   return (
     <ul className="cards">
       {state.agents.map((a) => {
@@ -183,7 +184,7 @@ export function Inspector({ state, selection, onClose }: { state: FacilityState;
     const a = state.agents.find((x) => x.id === selection.id);
     if (!a) return null;
     const task = a.taskId ? state.tasks.find((t) => t.id === a.taskId) : null;
-    const finished = state.tasks.filter((t) => t.state === "done" && t.notes.length && t.wingId === a.wingId).length;
+    const finished = completedCount(state, a.wingId);
     title = `${a.name} · ${a.role}`;
     body = (
       <>

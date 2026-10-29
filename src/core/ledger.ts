@@ -14,11 +14,28 @@ import type {
 type Listener = () => void;
 
 const MAX_LOG = 200;
+// Finished tasks and decided approvals kept in live state; older ones are only counted.
+const KEEP_FINISHED = 60;
+
+export function completedKey(wingId: WingId, workflowId: string) {
+  return `${wingId}/${workflowId}`;
+}
+
+/** Total finished tasks, optionally for one wing. */
+export function completedCount(state: FacilityState, wingId?: WingId) {
+  return Object.entries(state.completed)
+    .filter(([key]) => !wingId || key.startsWith(`${wingId}/`))
+    .reduce((sum, [, n]) => sum + n, 0);
+}
+
+export function monthKey(at: number) {
+  return new Date(at).toISOString().slice(0, 7);
+}
 
 /**
- * In-memory ledger. Every change goes through a method here so that later a
- * database-backed ledger can replace it without touching the view or agents.
- * Each change produces a new state object, which React reads as a snapshot.
+ * Every change to the facility goes through a method here. The server owns the
+ * ledger and saves its state; the browser only ever sees snapshots of it.
+ * Each change produces a new state object, so a snapshot never changes under you.
  */
 export class Ledger {
   private state: FacilityState;
@@ -32,6 +49,31 @@ export class Ledger {
   }
 
   getState = (): FacilityState => this.state;
+
+  /**
+   * Prepare a saved state for a fresh start. Work that was mid-stage when the
+   * facility stopped goes back to the queue rather than being assumed finished.
+   */
+  static recover(saved: FacilityState): FacilityState {
+    const interrupted = saved.tasks.filter((t) => t.state === "active").length;
+    const state: FacilityState = {
+      ...saved,
+      tasks: saved.tasks.map((t) =>
+        t.state === "active" ? { ...t, state: "queued", agentId: null, progress: 0 } : t,
+      ),
+      agents: saved.agents.map((a) =>
+        a.status === "paused" ? { ...a, taskId: null } : { ...a, status: "idle", taskId: null },
+      ),
+    };
+    const note = {
+      id: `log-recover-${Date.now().toString(36)}`,
+      at: Date.now(),
+      wingId: null,
+      level: "info" as const,
+      text: `Facility restarted. ${interrupted} interrupted task${interrupted === 1 ? "" : "s"} returned to the queue.`,
+    };
+    return { ...state, log: [note, ...state.log].slice(0, MAX_LOG) };
+  }
 
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
@@ -57,7 +99,16 @@ export class Ledger {
     return wing?.workflows.find((w) => w.id === task.workflowId)?.stages ?? [];
   }
 
+  /** Budgets are monthly: start the spend figures afresh when the month changes. */
+  private rollMonth() {
+    const month = monthKey(this.now());
+    if (month === this.state.spendMonth) return;
+    this.commit({ ...this.state, spend: {}, spendMonth: month });
+    this.log(`New month (${month}). Budgets reset.`);
+  }
+
   overBudget(wingId: WingId): boolean {
+    this.rollMonth();
     const wing = this.wing(wingId);
     if (!wing) return true;
     return (this.state.spend[wingId] ?? 0) >= wing.budgetMonthly;
@@ -105,6 +156,7 @@ export class Ledger {
   work(taskId: TaskId, amount: number, cost: number): boolean {
     const task = this.task(taskId);
     if (!task || task.state !== "active") return false;
+    this.rollMonth();
     const progress = Math.min(1, task.progress + amount);
     this.patchTask(taskId, { progress, cost: task.cost + cost });
     this.commit({
@@ -184,6 +236,10 @@ export class Ledger {
     const last = task.stageIndex >= this.stagesOf(task).length - 1;
     if (last) {
       this.patchTask(taskId, { state: "done", agentId: null, progress: 1, notes });
+      const key = completedKey(task.wingId, task.workflowId);
+      const completed = { ...this.state.completed, [key]: (this.state.completed[key] ?? 0) + 1 };
+      this.commit({ ...this.state, completed });
+      this.prune();
       this.log(`Completed: ${task.title}`, "success", task.wingId);
     } else {
       this.patchTask(taskId, {
@@ -194,6 +250,27 @@ export class Ledger {
         notes,
       });
     }
+  }
+
+  /** Keep live state small: drop the oldest finished tasks and decided approvals. */
+  private prune() {
+    const done = this.state.tasks.filter((t) => t.state === "done");
+    if (done.length <= KEEP_FINISHED) return;
+    const drop = new Set(
+      done
+        .sort((a, b) => a.updatedAt - b.updatedAt)
+        .slice(0, done.length - KEEP_FINISHED)
+        .map((t) => t.id),
+    );
+    const decided = this.state.approvals.filter((a) => a.status !== "pending");
+    const keepDecided = new Set(decided.slice(0, KEEP_FINISHED).map((a) => a.id));
+    this.commit({
+      ...this.state,
+      tasks: this.state.tasks.filter((t) => !drop.has(t.id)),
+      approvals: this.state.approvals.filter(
+        (a) => a.status === "pending" || (keepDecided.has(a.id) && !drop.has(a.taskId)),
+      ),
+    });
   }
 
   private releaseAgent(agentId: AgentId | null) {

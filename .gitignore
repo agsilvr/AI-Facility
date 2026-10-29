@@ -4,3 +4,6 @@ dist
 .env.*
 *.local
 *.tsbuildinfo
+build
+data
+logs

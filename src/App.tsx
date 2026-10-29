@@ -1,47 +1,59 @@
 import { useEffect, useMemo, useState } from "react";
-import { Ledger } from "./core/ledger";
-import { initialState } from "./core/seed";
+import { RemoteFacility } from "./client/remote";
 import { FacilityView } from "./facility/FacilityView";
 import type { Selection } from "./facility/render";
-import { DemoSimulation } from "./sim/demo";
 import { Inspector, Sidebar } from "./ui/Sidebar";
 import { TopBar } from "./ui/TopBar";
-import { useLedger } from "./ui/useLedger";
-
-const TICK_MS = 100;
+import { useFacility } from "./ui/useFacility";
 
 export function App() {
-  const ledger = useMemo(() => new Ledger(initialState()), []);
-  const sim = useMemo(() => new DemoSimulation(ledger), [ledger]);
-  const state = useLedger(ledger);
-  const [running, setRunning] = useState(true);
-  const [speed, setSpeed] = useState(1);
+  const facility = useMemo(() => new RemoteFacility(), []);
+  useFacility(facility);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const id = setInterval(() => {
-      if (running) sim.tick((TICK_MS / 1000) * speed);
-      setNow(Date.now());
-    }, TICK_MS);
+    facility.start();
+    return () => facility.stop();
+  }, [facility]);
+
+  // Keeps "2m ago" labels fresh between server updates.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [sim, running, speed]);
+  }, []);
+
+  if (!facility.ready()) {
+    return (
+      <div className="boot">
+        <p>{facility.connection === "offline" ? "Can't reach the facility server. Retrying…" : "Connecting to the facility…"}</p>
+      </div>
+    );
+  }
+
+  const state = facility.getState();
+  const control = facility.getControl();
 
   return (
     <div className="app">
+      {facility.connection === "offline" && (
+        <div className="offline-banner" role="alert">
+          Lost connection to the facility server. Showing the last known state; reconnecting…
+        </div>
+      )}
       <TopBar
         state={state}
-        running={running}
-        speed={speed}
-        onToggleRunning={() => setRunning((r) => !r)}
-        onSpeed={setSpeed}
+        running={control.running}
+        speed={control.speed}
+        onToggleRunning={() => facility.setControl({ running: !control.running })}
+        onSpeed={(speed) => facility.setControl({ speed })}
       />
       <main className="main">
         <section className="map-panel">
-          <FacilityView ledger={ledger} selection={selection} onSelect={setSelection} />
+          <FacilityView ledger={facility} selection={selection} onSelect={setSelection} />
           {selection && <Inspector state={state} selection={selection} onClose={() => setSelection(null)} />}
         </section>
-        <Sidebar ledger={ledger} state={state} now={now} onSelect={setSelection} />
+        <Sidebar ledger={facility} state={state} now={now} onSelect={setSelection} />
       </main>
     </div>
   );

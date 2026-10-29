@@ -1,3 +1,4 @@
+import { monthKey } from "./ledger";
 import type { Agent, FacilityState, Room, Wing } from "./types";
 
 // The starting facility: a shared core, the Etsy wing, and a sealed level
@@ -99,5 +100,7 @@ export function initialState(): FacilityState {
       { id: "log-boot", at: Date.now(), wingId: null, level: "success", text: "Facility online. All crew reporting for duty." },
     ],
     spend: { core: 0, etsy: 0, expansion: 0 },
+    spendMonth: monthKey(Date.now()),
+    completed: {},
   };
 }
