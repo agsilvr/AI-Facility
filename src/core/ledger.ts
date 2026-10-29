@@ -20,6 +20,12 @@ const MAX_LOG = 200;
 // Finished tasks and decided approvals kept in live state; older ones are only counted.
 const KEEP_FINISHED = 60;
 
+/**
+ * How long an approval card can wait, and how long an approval stays good
+ * once given. Anything older is stale: the owner sends it back for a fresh draft.
+ */
+export const APPROVAL_TTL_MS = 24 * 60 * 60 * 1000;
+
 export function completedKey(wingId: WingId, workflowId: string) {
   return `${wingId}/${workflowId}`;
 }
@@ -154,9 +160,7 @@ export class Ledger {
     const stage = this.stagesOf(task)[task.stageIndex];
     if (!stage) return;
     if (stage.action && !this.mayAct(task)) {
-      // Fail closed: the content no longer matches what the owner approved.
-      this.patchTask(taskId, { state: "queued", stageIndex: Math.max(0, task.stageIndex - 1), approvedContent: undefined });
-      this.log(`Blocked "${stage.label}" on ${task.title}: it no longer matches what you approved. Sent back for review.`, "warning", task.wingId);
+      this.sendBackUnapproved(task, stage.label);
       return;
     }
     this.patchTask(taskId, { state: "active", agentId, progress: 0 });
@@ -185,7 +189,13 @@ export class Ledger {
   mayAct(task: Task): boolean {
     const stage = this.stagesOf(task)[task.stageIndex];
     if (!stage?.action || !task.draft) return false;
+    if (task.approvedAt === undefined || this.now() - task.approvedAt > APPROVAL_TTL_MS) return false;
     return task.approvedContent !== undefined && task.approvedContent === serializeDraft(task.draft);
+  }
+
+  /** Has this approval card waited too long to be approved? */
+  isExpired(approval: Approval) {
+    return this.now() - approval.createdAt > APPROVAL_TTL_MS;
   }
 
   /**
@@ -198,6 +208,16 @@ export class Ledger {
     if (!task) return;
     const stage = this.stagesOf(task)[task.stageIndex];
     if (!stage) return;
+    if (stage.action) {
+      // Checked again at the moment of acting, not just when the work started.
+      if (!this.mayAct(task)) {
+        this.releaseAgent(task.agentId);
+        this.sendBackUnapproved(task, stage.label);
+        return;
+      }
+      // An approval is good for one action only.
+      this.patchTask(taskId, { approvedContent: undefined, approvedAt: undefined });
+    }
     const notes = [...task.notes, `${stage.label}: ${note}`];
     const draft = output.draft ?? task.draft;
     const flags = [...(output.inputFlags ?? []), ...(draft ? checkDraft(draft) : [])];
@@ -247,6 +267,10 @@ export class Ledger {
         this.log(`Can't approve "${task.title}": the draft changed after it was shown to you.`, "warning", approval.wingId);
         return false;
       }
+      if (this.isExpired(approval)) {
+        this.log(`Can't approve "${task?.title}": it waited more than a day. Send it back for a fresh draft.`, "warning", approval.wingId);
+        return false;
+      }
     }
     this.commit({
       ...this.state,
@@ -258,7 +282,7 @@ export class Ledger {
     });
     if (!task) return true;
     if (approve) {
-      this.patchTask(task.id, { approvedContent: approval.content ?? "null" });
+      this.patchTask(task.id, { approvedContent: approval.content ?? "null", approvedAt: this.now() });
       this.log(`Approved: ${task.title}`, "success", task.wingId);
       this.moveOn(task.id, task.notes);
     } else {
@@ -268,6 +292,7 @@ export class Ledger {
         stageIndex: Math.max(0, task.stageIndex - 1),
         progress: 0,
         approvedContent: undefined,
+        approvedAt: undefined,
       });
       this.log(`Sent back for rework: ${task.title}`, "warning", task.wingId);
     }
@@ -283,6 +308,19 @@ export class Ledger {
     }
     this.patchAgent(agentId, { status: paused ? "paused" : "idle", taskId: null });
     this.log(`${agent.name} ${paused ? "paused" : "resumed"}`, "info", agent.wingId);
+  }
+
+  /** Fail closed: an action without a valid approval goes back to be redone and approved again. */
+  private sendBackUnapproved(task: Task, label: string) {
+    this.patchTask(task.id, {
+      state: "queued",
+      agentId: null,
+      progress: 0,
+      stageIndex: Math.max(0, task.stageIndex - 1),
+      approvedContent: undefined,
+      approvedAt: undefined,
+    });
+    this.log(`Blocked "${label}" on ${task.title}: it no longer matches a current approval from you. Sent back for review.`, "warning", task.wingId);
   }
 
   private moveOn(taskId: TaskId, notes: string[]) {

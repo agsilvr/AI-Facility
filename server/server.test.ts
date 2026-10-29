@@ -107,6 +107,17 @@ describe("HTTP API", () => {
       body: JSON.stringify(body),
     });
 
+  /** Set the owner's PIN and return the session cookie the server hands back. */
+  async function ownerCookie(pin = "246810") {
+    const code = facility.owner.newSetupCode()!;
+    const res = await post("/api/owner/setup", { pin, code });
+    expect(res.status).toBe(200);
+    const set = res.headers.get("set-cookie")!;
+    expect(set).toMatch(/HttpOnly/);
+    expect(set).toMatch(/SameSite=Strict/);
+    return { Cookie: set.split(";")[0] };
+  }
+
   function makePendingApproval() {
     const { ledger } = facility;
     const task = ledger.createTask("etsy", "message", "Question");
@@ -123,11 +134,41 @@ describe("HTTP API", () => {
     expect(body.control).toEqual({ running: true, speed: 1 });
   });
 
-  it("approves work", async () => {
+  it("approves work for the owner", async () => {
     const id = makePendingApproval();
-    const res = await post(`/api/approvals/${id}`, { approve: true });
+    const res = await post(`/api/approvals/${id}`, { approve: true }, await ownerCookie());
     expect(res.status).toBe(200);
     expect(facility.ledger.getState().approvals[0].status).toBe("approved");
+  });
+
+  it("refuses decisions without the owner's PIN session, whoever sends them", async () => {
+    const id = makePendingApproval();
+    expect((await post(`/api/approvals/${id}`, { approve: true })).status).toBe(401);
+    expect((await post(`/api/approvals/${id}`, { approve: false })).status).toBe(401);
+    await ownerCookie();
+    expect((await post(`/api/approvals/${id}`, { approve: true }, { Cookie: "facility_owner=forged" })).status).toBe(401);
+    expect(facility.ledger.getState().approvals[0].status).toBe("pending");
+  });
+
+  it("unlocks with the PIN, refuses a wrong one, and locks again", async () => {
+    await ownerCookie("246810");
+    expect((await post("/api/owner/unlock", { pin: "000000" })).status).toBe(403);
+    const ok = await post("/api/owner/unlock", { pin: "246810" });
+    expect(ok.status).toBe(200);
+    const cookie = { Cookie: ok.headers.get("set-cookie")!.split(";")[0] };
+    const status = await (await fetch(`${base}/api/owner`, { headers: cookie })).json();
+    expect(status.pinSet).toBe(true);
+    expect(status.unlockedUntil).toBeGreaterThan(Date.now());
+    await post("/api/owner/lock", {}, cookie);
+    const after = await (await fetch(`${base}/api/owner`, { headers: cookie })).json();
+    expect(after.unlockedUntil).toBeNull();
+    expect(facility.ledger.getState().log.some((e) => e.text === "Wrong approval PIN entered")).toBe(true);
+  });
+
+  it("won't set a first PIN without the setup code", async () => {
+    facility.owner.newSetupCode();
+    expect((await post("/api/owner/setup", { pin: "246810", code: "guess" })).status).toBe(403);
+    expect(facility.owner.hasPin()).toBe(false);
   });
 
   it("refuses to approve content with a blocking safety finding", async () => {
@@ -137,14 +178,14 @@ describe("HTTP API", () => {
     ledger.work(task.id, 1, 0);
     ledger.finishStage(task.id, "draft", { draft: { kind: "reply", message: "Pay me on PayPal" } });
     const id = ledger.getState().approvals[0].id;
-    const res = await post(`/api/approvals/${id}`, { approve: true });
+    const res = await post(`/api/approvals/${id}`, { approve: true }, await ownerCookie());
     expect(res.status).toBe(409);
     expect(ledger.getState().approvals[0].status).toBe("pending");
   });
 
   it("refuses approvals from another website", async () => {
     const id = makePendingApproval();
-    const res = await post(`/api/approvals/${id}`, { approve: true }, { Origin: "https://evil.example" });
+    const res = await post(`/api/approvals/${id}`, { approve: true }, { Origin: "https://evil.example", ...(await ownerCookie()) });
     expect(res.status).toBe(403);
     expect(facility.ledger.getState().approvals[0].status).toBe("pending");
   });
@@ -164,19 +205,30 @@ describe("HTTP API", () => {
 
   it("refuses non-JSON and malformed requests", async () => {
     const id = makePendingApproval();
-    const form = await fetch(`${base}/api/approvals/${id}`, { method: "POST", body: "approve=true" });
+    const owner = await ownerCookie();
+    const form = await fetch(`${base}/api/approvals/${id}`, { method: "POST", body: "approve=true", headers: owner });
     expect(form.status).toBe(415);
-    expect((await post(`/api/approvals/${id}`, { approve: "yes" })).status).toBe(400);
-    expect((await post(`/api/approvals/nope`, { approve: true })).status).toBe(404);
+    expect((await post(`/api/approvals/${id}`, { approve: "yes" }, owner)).status).toBe(400);
+    expect((await post(`/api/approvals/nope`, { approve: true }, owner)).status).toBe(404);
   });
 
-  it("pauses an agent and controls the facility", async () => {
+  it("lets anyone pause, but only the owner resume", async () => {
     expect((await post("/api/agents/scout/pause", { paused: true })).status).toBe(200);
+    expect(facility.ledger.agent("scout")?.status).toBe("paused");
+    expect((await post("/api/agents/scout/pause", { paused: false })).status).toBe(401);
     expect(facility.ledger.agent("scout")?.status).toBe("paused");
     expect((await post("/api/control", { running: false, speed: 4 })).status).toBe(200);
     expect(facility.getControl()).toEqual({ running: false, speed: 4 });
+    expect((await post("/api/control", { running: true })).status).toBe(401);
+    expect(facility.getControl().running).toBe(false);
     await post("/api/control", { speed: 1000 });
     expect(facility.getControl().speed).toBe(4);
+
+    const owner = await ownerCookie();
+    expect((await post("/api/agents/scout/pause", { paused: false }, owner)).status).toBe(200);
+    expect(facility.ledger.agent("scout")?.status).toBe("idle");
+    expect((await post("/api/control", { running: true }, owner)).status).toBe(200);
+    expect(facility.getControl().running).toBe(true);
   });
 
   it("streams snapshots", async () => {

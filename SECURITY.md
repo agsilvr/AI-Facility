@@ -39,7 +39,16 @@ here is enforced by code and covered by tests; the tests are named so they read 
      command line or in the system prompt. Their answer is checked against the schema again
      in our code. (`server/agents/reader.ts`)
    - **Actions** (publish a listing, send a reply) are plain code, not AI. They run only on
-     content the owner approved, byte for byte. (`Ledger.mayAct`)
+     content the owner approved, byte for byte, within a day of the approval, and each
+     approval is used once. The check runs again at the moment of acting. (`Ledger.mayAct`)
+6. **The owner's PIN.** Approving, sending back and resuming after a pause need an owner
+   session, and a session needs the owner's PIN (6 to 12 digits). The PIN is stored only as a
+   salted scrypt hash. The first PIN can only be set with a one-time code the server writes to
+   `data/owner-setup-link.txt`, which the installer opens; AI tools in this folder can't read
+   `data/`. A session is an HttpOnly, same-site cookie that ends after 20 minutes or when the
+   owner presses Lock. Five wrong PINs lock it for a minute, doubling each time up to an hour,
+   and the count survives restarts. Pausing never needs the PIN, so stopping is always one tap.
+   (`server/owner.ts`)
 
 ## Threats and what stops them
 
@@ -52,6 +61,8 @@ here is enforced by code and covered by tests; the tests are named so they read 
 | Bait and switch | A draft changes after the owner approved it | Approval binds to the exact content; a mismatch blocks the action and sends the work back | `approval.test.ts` |
 | Skipped approval | A new workflow puts an action without a gate, or a step between gate and action | The server refuses to start | `policy.test.ts` |
 | Blind approval | An approval card with nothing on it | Blocked as "no-draft" | `approval.test.ts` |
+| Someone else approving | A program on this Mac, or an AI tool, posts "approve" to the local server | Decisions need the owner's PIN session; wrong PINs are logged and lock out | `owner.test.ts`, `server.test.ts`, `lockdown.test.ts` |
+| Stale or reused approval | An approval from last week is used to publish today, or one approval is used twice | Approvals expire after 24 hours, are cleared once used, and are re-checked at the moment of acting | `approval.test.ts` |
 | Runaway spending | An agent loops | Hard monthly budget per wing; readers stop after 3 turns and time out after 2 minutes | `ledger.test.ts` |
 | Errors treated as success | Claude Code crashes or returns junk | The reader fails closed; nothing is produced | `reader.test.ts` |
 | Secret leaks | An API key in a reader's environment | Environment scrubbed to six harmless variables | `reader.test.ts` |
@@ -59,6 +70,13 @@ here is enforced by code and covered by tests; the tests are named so they read 
 | Restart surprise | The owner paused everything, the Mac reboots | The pause is saved and holds after restart | `server.test.ts` |
 | Another website pressing buttons | A page in another tab posts to the facility | Origin, content-type and Host checks | `server.test.ts` |
 | Supply chain | A malicious package or plugin | Few dependencies, lockfile, no third-party skills or MCP servers without review | rule 5 in `CLAUDE.md` |
+
+## Known limits
+
+- **A program running as the BEM user** could still edit the facility's database directly,
+  PIN hash included. The PIN stops programs and AI tools that can reach the local server but
+  not its `data/` folder. Keeping other software off the BEM account is part of the defence.
+- **Touch ID** for approvals is planned; until then the PIN is the owner's proof.
 
 ## What stays manual
 

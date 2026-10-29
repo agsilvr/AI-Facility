@@ -112,6 +112,8 @@ export interface Task {
   flags: Flag[];
   /** Exact serialised draft the owner approved; an action may only use this. */
   approvedContent?: string;
+  /** When the owner approved it. An approval is good for APPROVAL_TTL_MS, and for one action. */
+  approvedAt?: number;
 }
 
 export interface ListingDraft {

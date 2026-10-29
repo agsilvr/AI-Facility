@@ -553,6 +553,101 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.stale {
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.pin-needed {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  line-height: 1.5;
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.14);
+  border-left: 3px solid var(--warn);
+}
+
+/* The owner's lock, next to the facility controls. */
+.owner-badge {
+  white-space: nowrap;
+}
+
+span.owner-badge {
+  padding: 6px 10px;
+  border: 1px solid var(--warn);
+  border-radius: 6px;
+  color: #fde68a;
+}
+
+.owner-badge.open {
+  border-color: var(--ok);
+  color: #bbf7d0;
+}
+
+/* The PIN prompt sits over everything, so nothing else can be pressed while it's open. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(3, 5, 8, 0.72);
+}
+
+.modal {
+  width: min(360px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+.modal h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.modal p {
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.pin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+
+.pin-field input {
+  font: inherit;
+  font-size: 20px;
+  letter-spacing: 6px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.pin-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.pin-error {
+  color: #fecaca;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* The map's buttons, tooltip and hint sit over the canvas, in a chunky retro style. */
 .map-buttons {
   position: absolute;

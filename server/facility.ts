@@ -3,6 +3,7 @@ import type { Control } from "../src/core/port";
 import { assertSafeWorkflows } from "../src/core/policy";
 import { initialState, rooms, wings } from "../src/core/seed";
 import { DemoSimulation } from "../src/sim/demo";
+import { OwnerGate } from "./owner";
 import type { Store } from "./store";
 
 const TICK_MS = 200;
@@ -15,6 +16,8 @@ const SPEEDS = [1, 2, 4];
  */
 export class Facility {
   readonly ledger: Ledger;
+  /** Proof that a decision comes from the owner. */
+  readonly owner: OwnerGate;
   private sim: DemoSimulation;
   private control: Control = { running: true, speed: 1 };
   private timer: NodeJS.Timeout | null = null;
@@ -29,6 +32,7 @@ export class Facility {
     const saved = store.load();
     this.ledger = new Ledger(saved ? { ...Ledger.recover(saved), wings, rooms } : initialState());
     this.sim = new DemoSimulation(this.ledger);
+    this.owner = new OwnerGate(store);
     // A pause is the kill switch, so it survives a restart: if the owner
     // stopped the facility, it stays stopped until they start it again.
     if (store.getSetting("paused") === "true") this.control = { ...this.control, running: false };

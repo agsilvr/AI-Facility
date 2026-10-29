@@ -19,6 +19,12 @@ export class RemoteFacility implements FacilityPort {
   private source: EventSource | null = null;
   connection: Connection = "connecting";
   private version = 0;
+  /**
+   * Called when the server refuses a command until the owner enters their PIN
+   * (approving, sending back, resuming). `retry` sends the same command again
+   * once they have.
+   */
+  onOwnerNeeded: ((retry: () => void) => void) | null = null;
 
   constructor(private base = "") {}
 
@@ -78,7 +84,8 @@ export class RemoteFacility implements FacilityPort {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) console.error(`Facility refused ${path}: ${res.status}`);
+      if (res.status === 401 && this.onOwnerNeeded) this.onOwnerNeeded(() => void this.post(path, body));
+      else if (!res.ok) console.error(`Facility refused ${path}: ${res.status}`);
     } catch (err) {
       console.error(`Facility unreachable for ${path}`, err);
     }

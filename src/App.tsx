@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RemoteFacility } from "./client/remote";
 import { FacilityView } from "./facility/FacilityView";
 import type { Selection } from "./facility/render";
+import { OwnerDialog, useOwner } from "./ui/OwnerLock";
 import { Inspector, Sidebar } from "./ui/Sidebar";
 import { TopBar } from "./ui/TopBar";
 import { useFacility } from "./ui/useFacility";
@@ -11,6 +12,7 @@ export function App() {
   useFacility(facility);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [now, setNow] = useState(Date.now());
+  const owner = useOwner(facility, now);
 
   useEffect(() => {
     facility.start();
@@ -47,14 +49,17 @@ export function App() {
         speed={control.speed}
         onToggleRunning={() => facility.setControl({ running: !control.running })}
         onSpeed={(speed) => facility.setControl({ speed })}
+        owner={owner}
+        now={now}
       />
       <main className="main">
         <section className="map-panel">
           <FacilityView ledger={facility} selection={selection} onSelect={setSelection} />
           {selection && <Inspector state={state} selection={selection} onClose={() => setSelection(null)} />}
         </section>
-        <Sidebar ledger={facility} state={state} now={now} onSelect={setSelection} />
+        <Sidebar ledger={facility} state={state} now={now} pinSet={owner.status?.pinSet ?? true} onSelect={setSelection} />
       </main>
+      <OwnerDialog owner={owner} />
     </div>
   );
 }

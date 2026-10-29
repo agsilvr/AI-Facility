@@ -95,7 +95,8 @@
         "~/Library/Application Support/Google",
         "~/Library/Application Support/Firefox",
         "~/Library/Application Support/BraveSoftware",
-        "~/Library/Application Support/Microsoft Edge"
+        "~/Library/Application Support/Microsoft Edge",
+        "./data"
       ],
       "denyWrite": ["./.claude/settings.json", "./data"]
     },

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { completedCount, completedKey } from "../core/ledger";
+import { APPROVAL_TTL_MS, completedCount, completedKey } from "../core/ledger";
 import type { FacilityPort } from "../core/port";
 import type { Draft, FacilityState, Flag } from "../core/types";
 import type { Selection } from "../facility/status";
@@ -11,10 +11,12 @@ interface Props {
   ledger: FacilityPort;
   state: FacilityState;
   now: number;
+  /** False until the owner has chosen an approval PIN; nothing can be approved before then. */
+  pinSet: boolean;
   onSelect: (s: Selection) => void;
 }
 
-export function Sidebar({ ledger, state, now, onSelect }: Props) {
+export function Sidebar({ ledger, state, now, pinSet, onSelect }: Props) {
   const [tab, setTab] = useState<Tab>("attention");
   const pending = state.approvals.filter((a) => a.status === "pending");
 
@@ -29,7 +31,7 @@ export function Sidebar({ ledger, state, now, onSelect }: Props) {
         <TabButton id="log" tab={tab} setTab={setTab}>Log</TabButton>
       </nav>
       <div className="tab-body">
-        {tab === "attention" && <Attention ledger={ledger} state={state} now={now} />}
+        {tab === "attention" && <Attention ledger={ledger} state={state} now={now} pinSet={pinSet} />}
         {tab === "flow" && <Flow state={state} />}
         {tab === "crew" && <Crew ledger={ledger} state={state} onSelect={onSelect} />}
         {tab === "log" && <Log state={state} now={now} />}
@@ -58,16 +60,35 @@ function TabButton(props: {
   );
 }
 
-function Attention({ ledger, state, now }: { ledger: FacilityPort; state: FacilityState; now: number }) {
+function Attention({ ledger, state, now, pinSet }: { ledger: FacilityPort; state: FacilityState; now: number; pinSet: boolean }) {
   const pending = state.approvals.filter((a) => a.status === "pending");
+  const noPin = !pinSet && (
+    <p className="pin-needed">
+      Approvals are locked until you choose your approval PIN. The installer opens a page for it; if you closed it,
+      run the installer again.
+    </p>
+  );
   if (pending.length === 0) {
-    return <p className="empty">Nothing needs you right now. Agents will ask here before anything goes out.</p>;
+    return (
+      <>
+        {noPin}
+        <p className="empty">Nothing needs you right now. Agents will ask here before anything goes out.</p>
+      </>
+    );
   }
   return (
     <ul className="cards">
+      {noPin && <li>{noPin}</li>}
       {pending.map((a) => {
         const task = state.tasks.find((t) => t.id === a.taskId);
         const wing = state.wings.find((w) => w.id === a.wingId);
+        // The ledger refuses approvals older than this, so the button says so before you press it.
+        const stale = now - a.createdAt > APPROVAL_TTL_MS;
+        const why = blocked(a.flags)
+          ? "This can't go out as it is. Send it back to be redone."
+          : stale
+            ? "This has waited more than a day. Send it back for a fresh draft."
+            : undefined;
         return (
           <li key={a.id} className="card attention-card" style={{ borderLeftColor: wing?.color }}>
             <div className="card-head">
@@ -79,6 +100,7 @@ function Attention({ ledger, state, now }: { ledger: FacilityPort; state: Facili
               {task?.notes.map((n, i) => <li key={i}>{n}</li>)}
             </ul>
             {a.content && <DraftPreview content={a.content} />}
+            {stale && <p className="flag-warn stale">Waited more than a day: send it back for a fresh draft.</p>}
             {a.flags.length > 0 && (
               <ul className="flags">
                 {a.flags.map((f) => (
@@ -92,8 +114,8 @@ function Attention({ ledger, state, now }: { ledger: FacilityPort; state: Facili
             <div className="card-actions">
               <button
                 className="primary"
-                disabled={blocked(a.flags)}
-                title={blocked(a.flags) ? "This can't go out as it is. Send it back to be redone." : undefined}
+                disabled={!!why}
+                title={why}
                 onClick={() => ledger.decide(a.id, true)}
               >
                 Approve
