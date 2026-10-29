@@ -1,29 +1,15 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { FacilityPort } from "../core/port";
-import type { FacilityState } from "../core/types";
-import { buildLayout, contains, WORLD_W, type FacilityLayout } from "./layout";
-import { step, type Target, type Walker } from "./movement";
-import { drawFacility, type Selection } from "./render";
+import { buildLayout, contains, layoutKey, WORLD_W } from "./layout";
+import { step, type Walker } from "./movement";
+import { drawFacility } from "./render";
+import type { Selection } from "./status";
+import { targetFor } from "./targets";
 
 interface Props {
   ledger: FacilityPort;
   selection: Selection | null;
   onSelect: (selection: Selection | null) => void;
-}
-
-/** Where an agent should stand: its current room, spaced out from room-mates. */
-function targetFor(state: FacilityState, layout: FacilityLayout, agentId: string): Target | null {
-  const agent = state.agents.find((a) => a.id === agentId);
-  const room = agent && layout.rooms.get(agent.roomId);
-  if (!agent || !room) return null;
-  const mates = state.agents.filter((a) => a.roomId === agent.roomId);
-  const slot = mates.findIndex((a) => a.id === agentId);
-  const spacing = Math.min(30, (room.rect.w - 40) / Math.max(1, mates.length));
-  return {
-    x: room.rect.x + 24 + slot * spacing + spacing / 2,
-    y: room.floorY,
-    level: room.level,
-  };
 }
 
 export function FacilityView({ ledger, selection, onSelect }: Props) {
@@ -33,7 +19,9 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
   selectionRef.current = selection;
 
   const initial = ledger.getState();
-  const layout = useMemo(() => buildLayout(initial.wings, initial.rooms), [initial.wings, initial.rooms]);
+  const key = layoutKey(initial.wings, initial.rooms);
+  // Rebuilt only when the wings or rooms really change, not on every snapshot.
+  const layout = useMemo(() => buildLayout(initial.wings, initial.rooms), [key]);
   const walkers = useRef(new Map<string, Walker>());
   const scaleRef = useRef(1);
 

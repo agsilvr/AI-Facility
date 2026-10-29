@@ -2,15 +2,13 @@ import { completedCount } from "../core/ledger";
 import type { Agent, FacilityState, Room, RoomKind, Wing } from "../core/types";
 import { WORLD_W, type FacilityLayout, type Rect } from "./layout";
 import type { Walker } from "./movement";
+import { pendingApprovals, roomNeedsAttention, tasksInRoom, type Selection } from "./status";
+
+export type { Selection };
 
 // Canvas renderer for the underground facility. Everything is drawn from code
 // (no image files), in a chunky pixel style. The world is drawn at 1x and the
 // view applies a scale transform before calling drawFacility.
-
-export interface Selection {
-  kind: "room" | "agent";
-  id: string;
-}
 
 export interface Scene {
   state: FacilityState;
@@ -141,7 +139,7 @@ function drawRoomFurniture(
         else ctx.lineTo(x, y);
       }
       ctx.stroke();
-      const pending = state.approvals.filter((a) => a.status === "pending").length;
+      const pending = pendingApprovals(state);
       ctx.fillStyle = pending ? "#f87171" : "#4ade80";
       ctx.font = "bold 9px ui-monospace, Menlo, monospace";
       ctx.fillText(pending ? `${pending} AWAITING YOU` : "ALL CLEAR", sx + 6, r.y + 33);
@@ -205,11 +203,7 @@ function drawRoomFurniture(
       for (let x = 0; x < r.w - 20; x += 8) {
         px(ctx, r.x + 10 + ((x + t * 30) % (r.w - 20)), floorY - 13, 2, 6, "#57534e");
       }
-      const active = state.tasks.filter((x) => x.state === "active" || x.state === "awaiting_approval");
-      const boxes = active.filter((x) => {
-        const stages = state.wings.find((w) => w.id === x.wingId)?.workflows.find((w) => w.id === x.workflowId)?.stages;
-        return stages?.[x.stageIndex]?.roomId === room.id;
-      }).length;
+      const boxes = tasksInRoom(state, room.id);
       for (let i = 0; i < Math.min(boxes, 6); i++) {
         px(ctx, r.x + 18 + i * 22, floorY - 26, 16, 12, "#fbbf24");
         px(ctx, r.x + 18 + i * 22, floorY - 26, 16, 3, "#f59e0b");
@@ -252,17 +246,6 @@ function drawRoomFurniture(
       break;
     }
   }
-}
-
-function roomNeedsAttention(state: FacilityState, room: Room) {
-  if (room.kind === "command") return state.approvals.some((a) => a.status === "pending");
-  return state.approvals.some((a) => {
-    if (a.status !== "pending") return false;
-    const task = state.tasks.find((t) => t.id === a.taskId);
-    if (!task) return false;
-    const stages = state.wings.find((w) => w.id === task.wingId)?.workflows.find((w) => w.id === task.workflowId)?.stages;
-    return stages?.[task.stageIndex]?.roomId === room.id;
-  });
 }
 
 function drawRooms(ctx: CanvasRenderingContext2D, scene: Scene) {

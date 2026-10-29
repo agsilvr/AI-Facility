@@ -3,9 +3,10 @@
 An underground command facility for running AI agents across several businesses. Each
 business is a wing with its own rooms, crew and budget. The first wing is an Etsy shop.
 
-You can watch every agent move between rooms as work moves through each stage. Anything
-that needs you lights up red, and nothing goes out to customers or the shop without
-your approval.
+You can watch every agent move between rooms as work moves through each stage, in a 3D
+cut-away of the base you can turn, zoom and fly around (a 2D map is one click away).
+Anything that needs you lights up red, and nothing goes out to customers or the shop
+without your approval.
 
 **Status: Phase 2 (local server, demo crew).** The facility runs as a background service on
 the Mac mini, keeps its data in a local database, and carries on when the browser is closed.

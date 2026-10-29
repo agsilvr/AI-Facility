@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { rooms, wings } from "../core/seed";
-import { buildLayout, SHAFT, WORLD_W } from "./layout";
+import { buildLayout, layoutKey, SHAFT, WORLD_W } from "./layout";
 import { step } from "./movement";
 
 describe("layout", () => {
@@ -17,6 +17,12 @@ describe("layout", () => {
         expect(overlapsShaft).toBe(false);
       }
     }
+  });
+
+  it("has the same key for fresh copies of the same wings and rooms, so views aren't rebuilt", () => {
+    const copy = JSON.parse(JSON.stringify({ wings, rooms }));
+    expect(layoutKey(copy.wings, copy.rooms)).toBe(layoutKey(wings, rooms));
+    expect(layoutKey(wings, rooms.slice(1))).not.toBe(layoutKey(wings, rooms));
   });
 
   it("gives each wing its own level", () => {

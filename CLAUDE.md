@@ -74,8 +74,12 @@ Read them before every change and follow them without exception.
 
 ## Engineering rules
 
-- TypeScript strict mode, React for the UI, the facility map drawn on canvas in
-  `src/facility/`. Keep it dependency-light; justify every new package.
+- TypeScript strict mode, React for the UI. The facility is drawn in 3D with three.js in
+  `src/facility3d/`, with the 2D canvas map in `src/facility/` as the fallback. Both read the
+  same layout and the same room status (`src/facility/status.ts`), so they can't disagree.
+  Keep it dependency-light; justify every new package. three.js is the one rendering
+  dependency: pinned to an exact version, bundled locally, and loaded only for the 3D view.
+  Textures and fonts are generated in code; nothing is fetched at runtime.
 - `npm run typecheck`, `npm test` and `npm run build` must pass before any commit. CI runs
   them on every pull request.
 - Every behaviour change comes with a test. Ledger and dispatch logic must stay fully covered.
@@ -93,5 +97,6 @@ Read them before every change and follow them without exception.
 - `src/core/`: types, ledger, dispatch, safety checks, workflow policy, seed data (wings,
   rooms, agents, workflows).
 - `src/sim/`: demo mode with simulated agents and canned output.
-- `src/facility/`: map layout, movement and the canvas renderer.
+- `src/facility/`: map layout, movement, room status and the 2D canvas renderer.
+- `src/facility3d/`: the 3D facility (scene, rooms, crew, camera and quality helpers).
 - `src/ui/`: top bar, sidebar panels (Needs you, Task flow, Crew, Log) and inspector.

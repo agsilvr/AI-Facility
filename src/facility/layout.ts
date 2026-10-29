@@ -40,6 +40,15 @@ export interface FacilityLayout {
   shaft: Rect;
 }
 
+/**
+ * A fingerprint of everything the layout depends on. Every snapshot from the
+ * server carries fresh copies of the wings and rooms, so views compare this
+ * instead of object identity to avoid rebuilding the map on every update.
+ */
+export function layoutKey(wings: Wing[], rooms: Room[]) {
+  return JSON.stringify([wings.map((w) => w.id), rooms.map((r) => [r.id, r.wingId, r.kind])]);
+}
+
 export function buildLayout(wings: Wing[], rooms: Room[]): FacilityLayout {
   const levels: LevelLayout[] = [];
   const roomLayouts = new Map<RoomId, RoomLayout>();
