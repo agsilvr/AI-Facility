@@ -99,9 +99,9 @@ export function panelTexture(base: string, line: string, repeat: [number, number
 /** Metal floor grating. */
 export function floorTexture(repeat: [number, number]) {
   const { c, ctx } = canvas(128, 128);
-  ctx.fillStyle = "#2a2f38";
+  ctx.fillStyle = "#3a414c";
   ctx.fillRect(0, 0, 128, 128);
-  ctx.fillStyle = "#1a1e25";
+  ctx.fillStyle = "#262b33";
   for (let x = 0; x < 128; x += 16) for (let y = 0; y < 128; y += 16) ctx.fillRect(x + 2, y + 2, 12, 12);
   ctx.fillStyle = "rgba(255,255,255,0.06)";
   for (let x = 0; x < 128; x += 16) ctx.fillRect(x, 0, 1, 128);

@@ -1,12 +1,21 @@
 // Camera and quality decisions for the 3D view, kept free of three.js so
 // they can be unit tested.
 
-export interface Box2 {
+/** A stretch of floor to look at, and how tall the things standing on it are. */
+export interface Area {
   x0: number;
   x1: number;
-  top: number;
-  bottom: number;
+  z0: number;
+  z1: number;
+  /** Floor height. */
+  y: number;
+  /** Height of walls and furniture on the floor. */
+  h: number;
 }
+
+/** The default camera angle: looking down at about 45°, turned a little to the right. */
+export const ELEVATION = 0.78;
+export const AZIMUTH = 0.3;
 
 /** Camera distance at which a box of the given size fills the view. */
 export function fitDistance(fovDeg: number, aspect: number, width: number, height: number) {
@@ -20,14 +29,26 @@ export interface Focus {
 }
 
 /**
- * Where to put the camera to look at a box: straight on, a little from the
- * right and above, like the default view, with some margin around it.
+ * Where to put the camera to look down at a stretch of floor from above and
+ * in front, at the given angle, with some margin around it.
  */
-export function focusOn(box: Box2, fovDeg: number, aspect: number, margin = 1.35): Focus {
-  const cx = (box.x0 + box.x1) / 2;
-  const cy = (box.top + box.bottom) / 2;
-  const d = fitDistance(fovDeg, aspect, (box.x1 - box.x0) * margin, (box.top - box.bottom) * margin);
-  return { target: [cx, cy, 0], position: [cx + d * 0.13, cy + d * 0.07, d] };
+export function focusOn(area: Area, fovDeg: number, aspect: number, margin = 1.3, elevation = ELEVATION, azimuth = AZIMUTH): Focus {
+  const cx = (area.x0 + area.x1) / 2;
+  const cz = (area.z0 + area.z1) / 2;
+  const cy = area.y + area.h * 0.3;
+  const w = area.x1 - area.x0;
+  const d = area.z1 - area.z0;
+  const sinA = Math.abs(Math.sin(azimuth));
+  const cosA = Math.abs(Math.cos(azimuth));
+  // From above, depth is foreshortened and anything standing up leans into view.
+  const across = w * cosA + d * sinA;
+  const along = (d * cosA + w * sinA) * Math.sin(elevation) + area.h * Math.cos(elevation);
+  const dist = fitDistance(fovDeg, aspect, across * margin, along * margin);
+  const flat = dist * Math.cos(elevation);
+  return {
+    target: [cx, cy, cz],
+    position: [cx + flat * Math.sin(azimuth), cy + dist * Math.sin(elevation), cz + flat * Math.cos(azimuth)],
+  };
 }
 
 /** Smooth start and stop for camera moves. t runs from 0 to 1. */

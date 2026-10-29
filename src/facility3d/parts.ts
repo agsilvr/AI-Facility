@@ -16,51 +16,21 @@ export function glow(color: THREE.ColorRepresentation, intensity = 2) {
   return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: color, emissiveIntensity: intensity });
 }
 
-/** A parabolic dish, opening toward +y. */
+/** A parabolic dish with a dark rim, opening toward +y. */
 export function dish(radius: number, depth: number, material: THREE.Material) {
   const points: THREE.Vector2[] = [];
   for (let i = 0; i <= 12; i++) {
     const r = (radius * i) / 12;
     points.push(new THREE.Vector2(r, (depth * r * r) / (radius * radius)));
   }
-  return new THREE.Mesh(new THREE.LatheGeometry(points, 32), material);
-}
-
-let fade: THREE.Texture | null = null;
-
-/** Vertical fade, bright at the top: makes light beams soft instead of solid. */
-function fadeTexture() {
-  if (fade) return fade;
-  const c = document.createElement("canvas");
-  c.width = 4;
-  c.height = 128;
-  const ctx = c.getContext("2d")!;
-  const g = ctx.createLinearGradient(0, 0, 0, 128);
-  g.addColorStop(0, "#fff");
-  g.addColorStop(0.5, "#444");
-  g.addColorStop(1, "#000");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 4, 128);
-  fade = new THREE.CanvasTexture(c);
-  return fade;
-}
-
-/** A soft cone of light; its tip is at the top. */
-export function lightCone(color: THREE.ColorRepresentation, radius: number, height: number, opacity = 0.09) {
-  const cone = new THREE.Mesh(
-    new THREE.ConeGeometry(radius, height, 24, 1, true),
-    new THREE.MeshBasicMaterial({
-      color,
-      alphaMap: fadeTexture(),
-      transparent: true,
-      opacity,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      fog: false,
-    }),
-  );
-  return cone;
+  const group = new THREE.Group();
+  group.add(new THREE.Mesh(new THREE.LatheGeometry(points, 32), material));
+  // The rim keeps the dish's outline readable from any angle.
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(radius, radius * 0.05, 6, 40), standard("#334155", { metalness: 0.8, roughness: 0.4 }));
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = depth;
+  group.add(rim);
+  return group;
 }
 
 /** A text label that always faces the camera. Height is in scene units. */

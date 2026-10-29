@@ -4,7 +4,9 @@ An underground command facility for running AI agents across several businesses.
 business is a wing with its own rooms, crew and budget. The first wing is an Etsy shop.
 
 You can watch every agent move between rooms as work moves through each stage, in a 3D
-cut-away of the base you can turn, zoom and fly around (a 2D map is one click away).
+base seen from above, like a base-building game: each level is a floor dug a step deeper
+into the ground, joined by glass lifts. Drag to move around, turn and zoom, or jump to a
+level (a 2D map is one click away).
 Anything that needs you lights up red, and nothing goes out to customers or the shop
 without your approval.
 

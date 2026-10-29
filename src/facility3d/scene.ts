@@ -1,33 +1,56 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { MapControls } from "three/examples/jsm/controls/MapControls.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { completedCount } from "../core/ledger";
-import type { FacilityState } from "../core/types";
-import type { FacilityLayout, Rect } from "../facility/layout";
+import type { Agent, FacilityState } from "../core/types";
+import type { FacilityLayout } from "../facility/layout";
 import { step, type Walker } from "../facility/movement";
 import { pendingApprovals, roomNeedsAttention, tasksInRoom, type Selection } from "../facility/status";
 import { targetFor } from "../facility/targets";
-import { BACK_Z, FRONT_Z, SHAFT_SCENE, sceneX, sceneY } from "./coords";
-import { buildCrew, type CrewView } from "./crew";
+import {
+  CORRIDOR_D,
+  DROP,
+  LIFT_R,
+  liftPoint,
+  liftStops,
+  moveToward,
+  PIT_X,
+  PLATE_D,
+  plateOfY,
+  platesFor,
+  ROOM_D,
+  sceneX,
+  SHAFT_X,
+  walkOnPlate,
+  WALL_H,
+  type Plate,
+  type Point3,
+} from "./coords";
+import { buildCrew, type CrewView, type Pose } from "./crew";
 import { box, dish, disposeTree, glow, label, place, plate, standard } from "./parts";
-import { buildRoom, type RoomView } from "./rooms";
-import { grassTexture, rockBump, rockTexture, skyTexture } from "./textures";
-import { easeInOut, fitDistance, focusOn, FrameMeter, nextQuality, QUALITY, type Box2 } from "./view";
+import { buildRoom, roomBounds, type RoomView } from "./rooms";
+import { floorTexture, grassTexture, hazardTexture, rockBump, rockTexture, skyTexture } from "./textures";
+import { AZIMUTH, easeInOut, ELEVATION, focusOn, FrameMeter, nextQuality, QUALITY, type Area } from "./view";
 
-// The 3D facility: a cut-away of an underground base beneath a night-time
-// surface, one level per wing, joined by a glass lift shaft. It is drawn from
-// the same layout and ledger state as the 2D map, and only shows what the
-// ledger records (plus ambient motion like bubbles and blinking lights).
+// The 3D facility, seen from above like a base-building game: each level is a
+// wide floor dug a step deeper into the ground than the one behind it, with
+// rooms along the back, a corridor along the front and a glass lift down each
+// drop. It is drawn from the same layout and ledger state as the 2D map, and
+// only shows what the ledger records (plus ambient motion like bubbles and
+// blinking lights).
 
-const ROCK_FRONT = FRONT_Z + 0.5;
-const ROCK_BACK = -16;
-const ROCK_HALF_W = 160;
 const FLY_SECONDS = 0.9;
-/** The whole facility, surface antenna to the lowest level, for the overview. */
-const OVERVIEW_WIDTH = 96;
+/** How far the rock and ground reach beyond the pit on each side. */
+const WORLD_HALF_W = 260;
+/** Crew walk a little faster than the 2D map so they keep up after turning corners. */
+const WALK_SPEED = 10;
+/** How fast a crew member who fell behind catches up with a lift ride. */
+const CATCH_UP_SPEED = 25;
+/** Room around the whole base in the overview; the near edge looks bigger in perspective. */
+const OVERVIEW_MARGIN = 1.15;
 
 interface Flight {
   fromPos: THREE.Vector3;
@@ -37,18 +60,26 @@ interface Flight {
   t: number;
 }
 
+interface Placement {
+  at: Point3;
+  heading: number;
+}
+
 export class FacilityScene {
   private renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
-  private controls: OrbitControls;
+  private controls: MapControls;
   private rooms: RoomView[] = [];
   private crew = new Map<string, CrewView>();
   private walkers = new Map<string, Walker>();
+  private placements = new Map<string, Placement>();
   private ambient: ((time: number) => void)[] = [];
   private raycaster = new THREE.Raycaster();
+  private plates: Plate[];
+  private stops: number[];
   private bottom: number;
   private aspect = 1;
   private flight: Flight | null = null;
@@ -64,33 +95,36 @@ export class FacilityScene {
   ) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.25;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    this.bottom = sceneY(layout.height) - 2;
+    this.plates = platesFor(layout);
+    this.stops = liftStops(layout);
+    this.bottom = this.lastPlate.y - DROP - 3;
     this.scene.background = new THREE.Color(0x04050a);
-    this.scene.fog = new THREE.Fog(0x04050a, 160, 360);
+    this.scene.fog = new THREE.Fog(0x04050a, 260, 620);
 
-    this.camera = new THREE.PerspectiveCamera(30, 1, 0.5, 900);
-    this.controls = new OrbitControls(this.camera, canvas);
+    this.camera = new THREE.PerspectiveCamera(30, 1, 0.5, 1400);
+    // Map-style controls: drag to move around, right-drag or two fingers to turn.
+    this.controls = new MapControls(this.camera, canvas);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.controls.minAzimuthAngle = -0.75;
-    this.controls.maxAzimuthAngle = 0.75;
-    this.controls.minPolarAngle = 0.95;
-    this.controls.maxPolarAngle = 1.85;
-    this.controls.minDistance = 12;
-    this.controls.screenSpacePanning = true;
+    this.controls.minAzimuthAngle = -1.2;
+    this.controls.maxAzimuthAngle = 1.2;
+    this.controls.minPolarAngle = 0.3;
+    this.controls.maxPolarAngle = 1.2;
+    this.controls.minDistance = 10;
     this.controls.zoomToCursor = true;
     // Any touch of the controls takes over from an automatic camera move.
     this.controls.addEventListener("start", () => (this.flight = null));
 
     this.buildLights();
     this.buildSky();
-    this.buildSurface();
-    this.buildRock();
-    this.buildLevels(state);
-    this.buildShaft();
+    this.buildGround();
+    this.buildPit();
+    this.buildPlates(state);
+    this.buildLifts();
+    this.buildDock();
 
     for (const room of state.rooms) {
       const rl = layout.rooms.get(room.id);
@@ -103,11 +137,15 @@ export class FacilityScene {
 
     const composer = new EffectComposer(this.renderer);
     composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.7, 0.5, 0.85);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.5, 0.85);
     composer.addPass(this.bloom);
     composer.addPass(new OutputPass());
     this.composer = composer;
     this.applyQuality();
+  }
+
+  private get lastPlate() {
+    return this.plates[this.plates.length - 1];
   }
 
   resize(width: number, height: number) {
@@ -118,54 +156,59 @@ export class FacilityScene {
     this.renderer.setSize(width, height, false);
     this.composer.setSize(width, height);
     this.bloom.resolution.set(width / 2, height / 2);
-    this.controls.maxDistance = fitDistance(this.camera.fov, this.aspect, OVERVIEW_WIDTH, this.overviewBox().top - this.bottom) * 1.8;
+    const f = focusOn(this.overviewArea(), this.camera.fov, this.aspect, OVERVIEW_MARGIN);
+    const far = Math.hypot(f.position[0] - f.target[0], f.position[1] - f.target[1], f.position[2] - f.target[2]);
+    this.controls.maxDistance = far * 1.6;
   }
 
-  private overviewBox(): Box2 {
-    return { x0: -OVERVIEW_WIDTH / 2, x1: OVERVIEW_WIDTH / 2, top: 9, bottom: this.bottom };
+  /** The whole base: the surface dock down to the deepest level. */
+  private overviewArea(): Area {
+    return { x0: -PIT_X, x1: PIT_X, z0: this.plates[0].zBack - 2, z1: this.lastPlate.zFront, y: this.lastPlate.y / 2, h: WALL_H };
   }
 
   /** Jump straight to the overview, without flying (used on first show). */
   resetView() {
-    const f = focusOn(this.overviewBox(), this.camera.fov, this.aspect, 1);
+    const f = focusOn(this.overviewArea(), this.camera.fov, this.aspect, OVERVIEW_MARGIN);
     this.flight = null;
     this.camera.position.set(...f.position);
     this.controls.target.set(...f.target);
     this.controls.update();
   }
 
-  /** Fly back to the view of the whole facility. */
+  /** Fly back to the view of the whole facility, at the default angle. */
   overview() {
-    this.flyTo(this.overviewBox(), 1);
+    this.flyTo(this.overviewArea(), OVERVIEW_MARGIN, false);
   }
 
   /**
-   * Fly to one level of the facility. Levels are much wider than tall, so
-   * frame the height and let the sides run off screen: drag to look along it.
+   * Fly to one level of the facility. Levels are much wider than deep, so on
+   * narrower screens frame the middle and let the ends run off the sides
+   * (drag to move along it) rather than shrinking the rooms to fit.
    */
   focusLevel(index: number) {
-    const level = this.layout.levels[index];
-    if (!level) return;
-    const r = level.rect;
-    this.flyTo({ x0: -1, x1: 1, top: sceneY(r.y), bottom: sceneY(r.y + r.h) }, 2.6);
+    const p = this.plates[index + 1];
+    if (!p) return;
+    const half = Math.min(PIT_X, Math.max(20, PLATE_D * 1.5 * this.aspect));
+    this.flyTo({ x0: SHAFT_X - half, x1: SHAFT_X + half, z0: p.zBack, z1: p.zFront, y: p.y, h: WALL_H }, 1.05);
   }
 
   /** Fly to whatever is selected: a room, or the room a crew member is in. */
   focus(selection: Selection) {
     if (selection.kind === "room") {
       const room = this.rooms.find((r) => r.roomId === selection.id);
-      if (room) this.flyTo(room.bounds, 1.5);
+      if (room) this.flyTo(room.bounds, 1.4);
       return;
     }
-    const w = this.walkers.get(selection.id);
-    if (!w) return;
-    const x = sceneX(w.x);
-    const y = sceneY(w.y);
-    this.flyTo({ x0: x - 9, x1: x + 9, top: y + 7, bottom: y - 1 }, 1);
+    const at = this.placements.get(selection.id)?.at;
+    if (!at) return;
+    this.flyTo({ x0: at.x - 7, x1: at.x + 7, z0: at.z - 6, z1: at.z + 4, y: at.y, h: 4 }, 1);
   }
 
-  private flyTo(box: Box2, margin: number) {
-    const f = focusOn(box, this.camera.fov, this.aspect, margin);
+  /** Fly the camera to an area; by default keep the angle the owner turned it to. */
+  private flyTo(area: Area, margin: number, keepAngle = true) {
+    const elevation = keepAngle ? Math.PI / 2 - this.controls.getPolarAngle() : ELEVATION;
+    const azimuth = keepAngle ? this.controls.getAzimuthalAngle() : AZIMUTH;
+    const f = focusOn(area, this.camera.fov, this.aspect, margin, elevation, azimuth);
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       this.flight = null;
       this.camera.position.set(...f.position);
@@ -218,7 +261,8 @@ export class FacilityScene {
         this.crew.set(agent.id, view);
         this.scene.add(view.group);
       }
-      view.update(agent, next, state, time, isOn("agent", agent.id, selection), isOn("agent", agent.id, this.hovered));
+      const pose = this.poseFor(agent, next, dt);
+      view.update(agent, pose, state, time, isOn("agent", agent.id, selection), isOn("agent", agent.id, this.hovered));
     }
 
     for (const tick of this.ambient) tick(time);
@@ -231,6 +275,7 @@ export class FacilityScene {
       this.controls.target.lerpVectors(f.fromTarget, f.toTarget, k);
       if (f.t >= 1) this.flight = null;
     }
+    this.keepInBounds();
     this.controls.update();
 
     const fps = this.meter.add(dt);
@@ -243,6 +288,48 @@ export class FacilityScene {
     }
     if (QUALITY[this.quality].bloom) this.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
+   * Turn a walker on the 2D map into a place in the 3D base. Riding the
+   * shaft becomes a trip on the lift; on a plate the crew walk out of a room
+   * to the corridor, along it, and into the next room.
+   */
+  private poseFor(agent: Agent, walker: Walker, dt: number): Pose {
+    const prev = this.placements.get(agent.id);
+    const lift = liftPoint(walker.y, this.stops);
+    let at: Point3;
+    if (lift) {
+      at = prev && dist(prev.at, lift) < 20 ? moveToward(prev.at, lift, CATCH_UP_SPEED * dt) : lift;
+    } else {
+      const p = this.plates[plateOfY(walker.y, this.stops)];
+      const goal = { x: sceneX(walker.x), y: p.y, z: walker.moving ? p.zCorridor : p.zRoom };
+      if (!prev || dist(prev.at, goal) > 60) at = goal;
+      // Just off the lift: finish the ride to the corridor first.
+      else if (Math.abs(prev.at.y - p.y) > 0.01) at = moveToward(prev.at, { x: SHAFT_X, y: p.y, z: p.zCorridor }, CATCH_UP_SPEED * dt);
+      else at = walkOnPlate(prev.at, goal, p.zCorridor, WALK_SPEED * dt);
+    }
+    const dx = prev ? at.x - prev.at.x : 0;
+    const dz = prev ? at.z - prev.at.z : 0;
+    const moved = prev ? dist(prev.at, at) > 1e-4 : false;
+    const riding = !!lift || (!!prev && Math.abs(at.y - this.plates[plateOfY(walker.y, this.stops)].y) > 0.01);
+    // Face the way they walk; at rest face the work in front of them, or the viewer.
+    const rest = agent.status === "working" ? Math.PI : 0;
+    const heading = Math.hypot(dx, dz) > 1e-4 ? Math.atan2(dx, dz) : riding ? (prev?.heading ?? 0) : rest;
+    this.placements.set(agent.id, { at, heading });
+    return { ...at, heading, walking: moved && !riding, riding };
+  }
+
+  /** Keep the camera over the base, so it can't be dragged off into the dark. */
+  private keepInBounds() {
+    const t = this.controls.target;
+    const x = clamp(t.x, -PIT_X - 20, PIT_X + 20);
+    const y = clamp(t.y, this.lastPlate.y, 4);
+    const z = clamp(t.z, this.plates[0].zBack - 20, this.lastPlate.zFront + 8);
+    const shift = new THREE.Vector3(x - t.x, y - t.y, z - t.z);
+    if (shift.lengthSq() === 0) return;
+    t.add(shift);
+    this.camera.position.add(shift);
   }
 
   /** Lower the rendering cost to keep motion smooth on slower computers. */
@@ -258,7 +345,7 @@ export class FacilityScene {
   /** What's under a point on the canvas (in -1..1 device coordinates). */
   pick(ndcX: number, ndcY: number): Selection | null {
     this.raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
-    // Crew first: they stand inside rooms and should win over the room behind them.
+    // Crew first: they stand inside rooms and should win over the room around them.
     const crew = [...this.crew.values()].map((c) => c.group);
     for (const targets of [crew, this.rooms.map((r) => r.pick)]) {
       for (const hit of this.raycaster.intersectObjects(targets, true)) {
@@ -285,20 +372,20 @@ export class FacilityScene {
   }
 
   private buildLights() {
-    this.add(new THREE.AmbientLight(0x404a66, 0.8));
+    this.add(new THREE.AmbientLight(0x404a66, 1.1));
     this.add(new THREE.HemisphereLight(0x8090ff, 0x5a4030, 0.9));
-    const moon = new THREE.DirectionalLight(0xaabbff, 1.4);
-    moon.position.set(-60, 120, 80);
+    const moon = new THREE.DirectionalLight(0xaabbff, 1.3);
+    moon.position.set(-60, 140, 60);
     this.add(moon);
-    // A cool fill from the front so the cut-away reads clearly.
-    const fill = new THREE.DirectionalLight(0x8fa6d6, 1.1);
-    fill.position.set(30, -10, 120);
+    // A cool fill from the front so the drops and walls read clearly.
+    const fill = new THREE.DirectionalLight(0x9fb4e0, 1.4);
+    fill.position.set(30, 50, 160);
     this.add(fill);
   }
 
   private buildSky() {
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(500, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.SphereGeometry(600, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
       new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false, depthWrite: false }),
     );
     sky.position.y = -2;
@@ -309,9 +396,9 @@ export class FacilityScene {
     for (let i = 0; i < count; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI * 0.42;
-      positions[i * 3] = 450 * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = 450 * Math.cos(phi) + 10;
-      positions[i * 3 + 2] = 450 * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3] = 560 * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = 560 * Math.cos(phi) + 10;
+      positions[i * 3 + 2] = 560 * Math.sin(phi) * Math.sin(theta);
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -319,90 +406,260 @@ export class FacilityScene {
     this.add(new THREE.Points(geo, starMat));
     this.ambient.push((t) => (starMat.opacity = 0.75 + Math.sin(t * 0.7) * 0.2));
 
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(9, 24, 16), new THREE.MeshBasicMaterial({ color: 0xe8ecff, fog: false }));
-    this.add(place(moon, -150, 160, -380));
+    const moon = new THREE.Mesh(new THREE.SphereGeometry(11, 24, 16), new THREE.MeshBasicMaterial({ color: 0xe8ecff, fog: false }));
+    this.add(place(moon, -180, 200, -460));
   }
 
-  private buildSurface() {
-    // Ground stretching away behind the cut-away, with hills and pines.
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(ROCK_HALF_W * 4, 400),
-      standard("#ffffff", { map: grassTexture([80, 50]), roughness: 1 }),
-    );
-    ground.rotation.x = -Math.PI / 2;
-    this.add(place(ground, 0, 0, ROCK_FRONT - 200));
-    const edge = box(ROCK_HALF_W * 2, 0.5, 0.6, standard("#2f5a1c", { roughness: 1 }));
-    this.add(place(edge, 0, -0.2, ROCK_FRONT - 0.3));
+  /** Grass over everything that isn't dug out, with hills and pines. */
+  private buildGround() {
+    const pitBack = this.plates[0].zFront;
+    const pitFront = this.lastPlate.zFront;
+    const back = -420;
+    const grass = (x0: number, x1: number, z0: number, z1: number) => {
+      if (z1 - z0 < 0.01) return;
+      const g = new THREE.Mesh(
+        new THREE.PlaneGeometry(x1 - x0, z1 - z0),
+        standard("#ffffff", { map: grassTexture([(x1 - x0) / 8, (z1 - z0) / 8]), roughness: 1 }),
+      );
+      g.rotation.x = -Math.PI / 2;
+      this.add(place(g, (x0 + x1) / 2, 0, (z0 + z1) / 2));
+    };
+    grass(-WORLD_HALF_W, WORLD_HALF_W, back, pitBack);
+    grass(-WORLD_HALF_W, -PIT_X, pitBack, pitFront);
+    grass(PIT_X, WORLD_HALF_W, pitBack, pitFront);
+    // A turf lip along the cut, so the edge of the ground reads as soil.
+    const turf = standard("#2f5a1c", { roughness: 1 });
+    for (const [x0, x1] of [[-WORLD_HALF_W, -PIT_X], [PIT_X, WORLD_HALF_W]]) {
+      this.add(place(box(x1 - x0, 0.5, 0.6, turf), (x0 + x1) / 2, -0.2, pitFront - 0.3));
+      this.add(place(box(0.6, 0.5, pitFront - pitBack, turf), x0 === -WORLD_HALF_W ? x1 - 0.3 : x0 + 0.3, -0.2, (pitBack + pitFront) / 2));
+    }
 
     const hillMat = standard("#0f1a12", { roughness: 1, flatShading: true });
-    for (let i = 0; i < 14; i++) {
-      const r = 30 + ((i * 53) % 40);
+    for (let i = 0; i < 16; i++) {
+      const r = 34 + ((i * 53) % 44);
       const hill = new THREE.Mesh(new THREE.ConeGeometry(r, r * 0.55, 7), hillMat);
-      this.add(place(hill, -260 + i * 40 + ((i * 17) % 20), r * 0.27 - 1, -150 - ((i * 37) % 90)));
+      this.add(place(hill, -320 + i * 42 + ((i * 17) % 20), r * 0.27 - 1, back + 120 - ((i * 37) % 90)));
     }
     const trunk = standard("#3b2414", { roughness: 1 });
     const needles = standard("#14301c", { roughness: 1, flatShading: true });
-    for (let i = 0; i < 46; i++) {
-      const x = -120 + ((i * 97) % 240);
-      const z = -20 - ((i * 61) % 110);
-      if (Math.abs(x) < 16 && z > -30) continue;
-      const s = 0.8 + ((i * 13) % 10) / 12;
+    const dock = this.dockBounds();
+    for (let i = 0; i < 140; i++) {
+      const x = -150 + ((i * 97.3) % 300);
+      const z = this.plates[0].zBack - 120 + ((i * 61.7) % (pitFront - this.plates[0].zBack + 115));
+      // Keep trees out of the pit and off the dock's apron.
+      if (Math.abs(x) < PIT_X + 4 && z > pitBack - 3) continue;
+      if (dock && x > dock.x0 - 26 && x < dock.x1 + 26 && z > dock.z0 - 10) continue;
+      const s = 0.9 + ((i * 13) % 10) / 10;
       const tree = new THREE.Group();
       tree.add(place(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 1.6, 6), trunk), 0, 0.8, 0));
       tree.add(place(new THREE.Mesh(new THREE.ConeGeometry(1.4, 3, 7), needles), 0, 2.6, 0));
       tree.add(place(new THREE.Mesh(new THREE.ConeGeometry(1, 2.2, 7), needles), 0, 3.8, 0));
       tree.scale.setScalar(s);
+      tree.rotation.y = i;
       this.add(place(tree, x, 0, z));
     }
-    this.buildDock();
   }
 
+  private dockBounds() {
+    const rl = [...this.layout.rooms.values()].find((r) => r.level === -1);
+    return rl ? roomBounds(rl) : null;
+  }
+
+  private rock(w: number, h: number) {
+    return standard("#ffffff", {
+      map: rockTexture([w / 14, h / 14]),
+      bumpMap: rockBump([w / 7, h / 7]),
+      bumpScale: 2,
+      roughness: 0.95,
+      metalness: 0,
+    });
+  }
+
+  /**
+   * The dug-out pit: a stepped block of rock under each plate, the pit walls
+   * either side, and the cut face at the front showing the layers of earth.
+   */
+  private buildPit() {
+    const pitBack = this.plates[0].zFront;
+    const pitFront = this.lastPlate.zFront;
+    const tall = -this.bottom;
+
+    // One block under each plate. Its front face is the drop to the next level.
+    this.plates.forEach((p, i) => {
+      const z0 = i === 0 ? p.zBack - 30 : p.zBack;
+      const h = p.y - this.bottom;
+      const top = i === 0 ? -0.05 : p.y - 0.3;
+      this.add(place(box(PIT_X * 2, top - this.bottom, p.zFront - z0, this.rock(PIT_X * 2, h)), 0, (top + this.bottom) / 2, (z0 + p.zFront) / 2));
+    });
+
+    // Rock either side of the pit, its front face cut away to show the earth.
+    const sideW = WORLD_HALF_W - PIT_X;
+    for (const side of [-1, 1]) {
+      const cx = side * (PIT_X + sideW / 2);
+      this.add(place(box(sideW, tall - 0.05, pitFront - pitBack, this.rock(sideW, tall)), cx, (this.bottom - 0.05) / 2, (pitBack + pitFront) / 2));
+      // The pit wall facing in, with its own texture so it isn't stretched.
+      this.add(place(box(0.4, tall, pitFront - pitBack, this.rock(pitFront - pitBack, tall)), side * (PIT_X + 0.2), this.bottom / 2, (pitBack + pitFront) / 2));
+    }
+
+    // Steel ribs holding the pit walls and the drops, with a beam along each edge.
+    const steel = standard("#3b4250", { metalness: 0.9, roughness: 0.35 });
+    const ribs: THREE.Matrix4[] = [];
+    const m = () => new THREE.Matrix4();
+    for (const p of this.plates.slice(1)) {
+      for (const side of [-1, 1]) {
+        for (let z = p.zBack + 2; z < p.zFront - 1; z += 5) ribs.push(m().compose(new THREE.Vector3(side * (PIT_X - 0.15), p.y + 3.5, z), new THREE.Quaternion(), new THREE.Vector3(0.5, 7, 0.5)));
+      }
+    }
+    // On the drops, only the band of rock above the room walls of the level below shows.
+    const band = DROP - WALL_H;
+    this.plates.slice(0, -1).forEach((p) => {
+      for (let x = -PIT_X + 2; x < PIT_X; x += 8) {
+        if (Math.abs(x - SHAFT_X) < LIFT_R + 1.5) continue;
+        ribs.push(m().compose(new THREE.Vector3(x, p.y - band / 2, p.zFront + 0.2), new THREE.Quaternion(), new THREE.Vector3(0.6, band, 0.4)));
+      }
+    });
+    const ribMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), steel, ribs.length);
+    ribs.forEach((r, i) => ribMesh.setMatrixAt(i, r));
+    this.add(ribMesh);
+
+    // Glowing crystals in the exposed rock: drops, pit walls and the cut face.
+    const crystalMats = [glow(0x38bdf8, 2.2), glow(0xa855f7, 2.2)];
+    const crystal = (x: number, y: number, z: number, i: number) => {
+      const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.25 + (i % 4) * 0.12), crystalMats[i % 2]);
+      c.rotation.set(i, i * 2, i * 3);
+      c.scale.y = 2;
+      this.add(place(c, x, y, z));
+    };
+    this.plates.slice(0, -1).forEach((p, k) => {
+      for (let i = 0; i < 10; i++) {
+        const x = -PIT_X + 2 + ((i * 37.7 + k * 13) % (PIT_X * 2 - 4));
+        if (Math.abs(x - SHAFT_X) < 3) continue;
+        crystal(x, p.y - 0.5 - ((i * 0.7) % (band - 1)), p.zFront + 0.25, i + k);
+      }
+    });
+    for (let i = 0; i < 60; i++) {
+      const x = -WORLD_HALF_W * 0.6 + ((i * 113.7) % (WORLD_HALF_W * 1.2));
+      const y = -1.5 - ((i * 7.3) % (tall - 3));
+      const onPlate = Math.abs(x) < PIT_X && y > this.lastPlate.y - 1;
+      if (!onPlate) crystal(x, y, pitFront + 0.1, i);
+    }
+    this.plates.slice(1).forEach((p, k) => {
+      for (let i = 0; i < 8; i++) {
+        const z = p.zBack + 1 + ((i * 5.3) % (PLATE_D - 2));
+        crystal((i % 2 ? 1 : -1) * (PIT_X - 0.05), -1 - ((i * 3.1 + k) % (-p.y - 2)), z, i + k);
+      }
+    });
+  }
+
+  /** Each plate's floor, corridor, edge and name. */
+  private buildPlates(state: FacilityState) {
+    const grating = standard("#ffffff", { map: floorTexture([PIT_X / 2, CORRIDOR_D / 2]), metalness: 0.6, roughness: 0.5 });
+    const floorMat = standard("#ffffff", { map: floorTexture([PIT_X / 3, ROOM_D / 3]), metalness: 0.5, roughness: 0.6, color: "#8a919c" });
+    const hazard = standard("#ffffff", { map: hazardTexture([PIT_X / 1.5, 1]) });
+    const railMat = standard("#64748b", { metalness: 0.9, roughness: 0.3 });
+
+    this.plates.forEach((p, i) => {
+      const level = this.layout.levels[i - 1];
+      const wing = level && state.wings.find((w) => w.id === level.wingId);
+      const colour = wing?.sealed ? "#71717a" : (wing?.color ?? "#38bdf8");
+      const corridorZ0 = p.zBack + ROOM_D;
+      if (i > 0) {
+        // Floor under the rooms, and the corridor grating in front of them.
+        this.add(place(box(PIT_X * 2, 0.3, ROOM_D, floorMat), 0, p.y - 0.17, p.zBack + ROOM_D / 2));
+        this.add(place(box(PIT_X * 2, 0.3, CORRIDOR_D, grating), 0, p.y - 0.15, corridorZ0 + CORRIDOR_D / 2));
+        // A guide line in the wing's colour down the corridor.
+        this.add(place(box(PIT_X * 2 - 2, 0.04, 0.12, glow(colour, wing?.sealed ? 0.4 : 1.4)), 0, p.y + 0.02, corridorZ0 + 0.4));
+        // The level's name painted on the corridor floor.
+        const name = plate(`B${i} · ${wing?.name.toUpperCase() ?? ""}`, 2.2, { color: colour, background: "rgba(2,6,23,0.85)", border: colour });
+        name.rotation.x = -Math.PI / 2;
+        const nw = (name.geometry as THREE.PlaneGeometry).parameters.width;
+        this.add(place(name, -PIT_X + 1.5 + nw / 2, p.y + 0.03, p.zCorridor + 0.5));
+        // The lane from the lift above to this corridor.
+        const laneZ0 = p.zBack + LIFT_R * 2;
+        const lane = box(2.6, 0.04, p.zCorridor - laneZ0, standard("#1e293b", { metalness: 0.6 }));
+        this.add(place(lane, SHAFT_X, p.y + 0.02, (laneZ0 + p.zCorridor) / 2));
+        for (const dx of [-1.3, 1.3]) {
+          this.add(place(box(0.08, 0.05, p.zCorridor - laneZ0, glow(0x38bdf8, 1.2)), SHAFT_X + dx, p.y + 0.04, (laneZ0 + p.zCorridor) / 2));
+        }
+      } else {
+        // The concrete apron in front of the surface dock.
+        this.add(place(box(30, 0.2, p.zFront - p.zBack + 4, standard("#3f3f46", { roughness: 0.9 })), SHAFT_X, 0.02, (p.zBack - 4 + p.zFront) / 2));
+      }
+
+      // Hazard edge and a railing along the drop (open where the lift is).
+      const edgeY = p.y + 0.03;
+      this.add(place(box(PIT_X * 2, 0.06, 0.6, hazard), 0, edgeY, p.zFront - 0.3));
+      const railZ = p.zFront - 0.15;
+      for (const [x0, x1] of [[-PIT_X, SHAFT_X - LIFT_R - 0.4], [SHAFT_X + LIFT_R + 0.4, PIT_X]]) {
+        this.add(place(box(x1 - x0, 0.08, 0.08, railMat), (x0 + x1) / 2, p.y + 1.1, railZ));
+        this.add(place(box(x1 - x0, 0.06, 0.06, railMat), (x0 + x1) / 2, p.y + 0.6, railZ));
+        for (let x = x0; x <= x1 + 0.01; x += 3) this.add(place(box(0.1, 1.1, 0.1, railMat), x, p.y + 0.55, railZ));
+      }
+    });
+  }
+
+  /** A glass lift at each drop, from one corridor down to the next. */
+  private buildLifts() {
+    const frame = standard("#334155", { metalness: 0.9, roughness: 0.3 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.16, roughness: 0.05, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });
+    for (let i = 0; i + 1 < this.plates.length; i++) {
+      const from = this.plates[i];
+      const to = this.plates[i + 1];
+      const z = from.zFront + LIFT_R;
+      const top = from.y + 2.8;
+      const h = top - to.y;
+      const cy = (top + to.y) / 2;
+      this.add(place(new THREE.Mesh(new THREE.CylinderGeometry(LIFT_R, LIFT_R, h, 28, 1, true), glass), SHAFT_X, cy, z));
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+        this.add(place(box(0.18, h, 0.18, frame), SHAFT_X + Math.cos(a) * LIFT_R, cy, z + Math.sin(a) * LIFT_R));
+      }
+      const rim = glow(0x38bdf8, 2);
+      for (const y of [top, from.y + 0.05, to.y + 0.05]) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(LIFT_R, 0.09, 8, 36), y === top ? rim : frame);
+        ring.rotation.x = Math.PI / 2;
+        this.add(place(ring, SHAFT_X, y, z));
+      }
+      // A walkway from the corridor edge out to the lift.
+      this.add(place(box(2.6, 0.2, LIFT_R, frame), SHAFT_X, from.y - 0.1, from.zFront + LIFT_R / 2));
+      this.add(place(label("LIFT", 0.6, { color: "#7dd3fc", background: "rgba(2,6,23,0.8)", size: 40 }), SHAFT_X, top + 0.9, z));
+      // Light pulses running down the tube.
+      const pulses: THREE.Mesh[] = [];
+      for (let k = 0; k < 2; k++) {
+        const p = new THREE.Mesh(new THREE.TorusGeometry(LIFT_R * 0.92, 0.05, 6, 32), glow(0x7dd3fc, 3));
+        p.rotation.x = Math.PI / 2;
+        pulses.push(p);
+        this.add(place(p, SHAFT_X, top, z));
+      }
+      this.ambient.push((t) => pulses.forEach((p, k) => (p.position.y = top - ((t * 3 + (k * h) / 2) % h))));
+    }
+  }
+
+  /** Antenna, beacon, landing pad and dish around the surface dock. */
   private buildDock() {
-    // The surface dock: where approved work leaves for the Etsy shop.
-    const dock = this.layout.rooms.get("dock");
-    if (!dock) return;
-    const r = dock.rect;
-    const x0 = sceneX(r.x);
-    const x1 = sceneX(r.x + r.w);
-    const cx = (x0 + x1) / 2;
-    const w = x1 - x0;
-    const floor = sceneY(dock.floorY);
-    const top = sceneY(r.y);
-    const h = top - floor;
+    const b = this.dockBounds();
+    if (!b) return;
     const metal = standard("#334155", { metalness: 0.85, roughness: 0.35 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.16, metalness: 0.2, roughness: 0.05, depthWrite: false });
-
-    this.add(place(box(w + 6, 0.5, 14, standard("#1f2937", { metalness: 0.6 })), cx, floor - 0.25, -1));
-    this.add(place(box(w, 0.4, 10, metal), cx, top + 0.2, -1));
-    for (const x of [x0, x1]) this.add(place(box(0.4, h, 10, metal), x, floor + h / 2, -1));
-    this.add(place(box(w, h, 0.2, glass), cx, floor + h / 2, FRONT_Z));
-    this.add(place(box(w, h, 0.3, standard("#1e293b", { metalness: 0.6 })), cx, floor + h / 2, BACK_Z));
-    const trim = glow(0x38bdf8, 1.8);
-    this.add(place(box(w + 0.4, 0.15, 0.15, trim), cx, top + 0.45, FRONT_Z));
-    this.add(place(box(w + 0.4, 0.15, 0.15, trim), cx, floor + 0.1, FRONT_Z + 0.1));
-    const sign = plate("SURFACE DOCK · ETSY UPLINK", 1.1, { color: "#7dd3fc", background: "rgba(2,6,23,0.9)", border: "#38bdf8" });
-    this.add(place(sign, cx, top - 0.8, BACK_Z + 0.2));
-    const inside = new THREE.PointLight(0xbcd4ff, 40, 20, 1.6);
-    this.add(place(inside, cx, top - 1, 0));
-
-    // Antenna mast with a blinking beacon.
-    this.add(place(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 7, 8), metal), x1 - 1.2, top + 3.7, -3));
+    this.add(place(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 7, 8), metal), b.x1 - 1.2, 3.5, b.z0 + 1.2));
     const beacon = glow(0xff2020, 3);
-    this.add(place(new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), beacon), x1 - 1.2, top + 7.3, -3));
-    const beaconLight = this.add(place(new THREE.PointLight(0xff3030, 20, 16, 1.5), x1 - 1.2, top + 7.3, -3));
+    this.add(place(new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), beacon), b.x1 - 1.2, 7.1, b.z0 + 1.2));
+    const beaconLight = this.add(place(new THREE.PointLight(0xff3030, 20, 16, 1.5), b.x1 - 1.2, 7.1, b.z0 + 1.2));
     // Landing pad beside the dock.
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.8, 0.3, 40), standard("#27272a", { metalness: 0.5 }));
-    this.add(place(pad, x1 + 9, 0.15, -6));
+    this.add(place(pad, b.x1 + 9, 0.15, b.cz));
     const padRing = new THREE.Mesh(new THREE.TorusGeometry(3.6, 0.1, 6, 48), glow(0xf59e0b, 2));
     padRing.rotation.x = Math.PI / 2;
-    this.add(place(padRing, x1 + 9, 0.35, -6));
+    this.add(place(padRing, b.x1 + 9, 0.35, b.cz));
+    const padMark = plate("H", 3, { color: "#f59e0b" });
+    padMark.rotation.x = -Math.PI / 2;
+    this.add(place(padMark, b.x1 + 9, 0.32, b.cz));
     const dishMast = new THREE.Group();
     dishMast.add(place(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.25, 3, 8), metal), 0, 1.5, 0));
-    const bowl = dish(2.2, 0.8, standard("#7c8696", { metalness: 0.6, roughness: 0.45, side: THREE.DoubleSide }));
-    bowl.rotation.x = 0.8;
+    const bowl = dish(2.2, 0.8, standard("#aab4c3", { metalness: 0.5, roughness: 0.5, side: THREE.DoubleSide }));
+    bowl.rotation.x = 0.45;
     bowl.position.y = 3.2;
     dishMast.add(bowl);
-    this.add(place(dishMast, x0 - 9, 0, -8));
+    this.add(place(dishMast, b.x0 - 8, 0, b.cz));
     this.ambient.push((t) => {
       const on = Math.sin(t * 4) > 0;
       beacon.emissiveIntensity = on ? 4 : 0.2;
@@ -411,208 +668,12 @@ export class FacilityScene {
       padRing.material.emissiveIntensity = 1.2 + Math.sin(t * 2) * 0.8;
     });
   }
+}
 
-  /** Solid rock around the facility, with the levels and the shaft cut out. */
-  private buildRock() {
-    const tall = 0 - (this.bottom - 30);
-    const rock = standard("#ffffff", {
-      map: rockTexture([ROCK_HALF_W / 14, tall / 14]),
-      bumpMap: rockBump([ROCK_HALF_W / 7, tall / 7]),
-      bumpScale: 2,
-      roughness: 0.95,
-      metalness: 0,
-    });
-    const depth = ROCK_FRONT - ROCK_BACK;
-    const zMid = (ROCK_FRONT + ROCK_BACK) / 2;
-    const slab = (x0: number, x1: number, yTop: number, yBot: number) => {
-      if (x1 - x0 < 0.01 || yTop - yBot < 0.01) return;
-      this.add(place(box(x1 - x0, yTop - yBot, depth, rock), (x0 + x1) / 2, (yTop + yBot) / 2, zMid));
-    };
-    const shaftL = SHAFT_SCENE.x - SHAFT_SCENE.w / 2;
-    const shaftR = SHAFT_SCENE.x + SHAFT_SCENE.w / 2;
-    const band = (yTop: number, yBot: number) => {
-      slab(-ROCK_HALF_W, shaftL, yTop, yBot);
-      slab(shaftR, ROCK_HALF_W, yTop, yBot);
-    };
+function dist(a: Point3, b: Point3) {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+}
 
-    let above = -0.4;
-    for (const level of this.layout.levels) {
-      const top = sceneY(level.rect.y);
-      const bot = sceneY(level.rect.y + level.rect.h);
-      band(above, top);
-      slab(-ROCK_HALF_W, sceneX(level.rect.x), top, bot);
-      slab(sceneX(level.rect.x + level.rect.w), ROCK_HALF_W, top, bot);
-      above = bot;
-    }
-    slab(-ROCK_HALF_W, ROCK_HALF_W, above, this.bottom - 30);
-    // Rock behind the rooms.
-    const backDepth = BACK_Z - 0.3 - ROCK_BACK;
-    const backMat = rock.clone();
-    this.add(
-      place(box(ROCK_HALF_W * 2, -this.bottom + 30, backDepth, backMat), 0, (this.bottom - 30) / 2, ROCK_BACK + backDepth / 2),
-    );
-    // Glowing crystal veins in the rock face.
-    const crystalMats = [glow(0x38bdf8, 2.2), glow(0xa855f7, 2.2)];
-    for (let i = 0; i < 70; i++) {
-      const x = -ROCK_HALF_W + 4 + ((i * 113.7) % (ROCK_HALF_W * 2 - 8));
-      const y = -1.5 - ((i * 37.3) % (-this.bottom + 26));
-      if (this.insideHall(x, y)) continue;
-      const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.25 + (i % 4) * 0.12), crystalMats[i % 2]);
-      c.rotation.set(i, i * 2, i * 3);
-      c.scale.y = 2;
-      this.add(place(c, x, y, ROCK_FRONT));
-    }
-  }
-
-  private insideHall(x: number, y: number) {
-    for (const level of this.layout.levels) {
-      const r = level.rect;
-      if (x > sceneX(r.x) - 1 && x < sceneX(r.x + r.w) + 1 && y < sceneY(r.y) + 1 && y > sceneY(r.y + r.h) - 1) return true;
-    }
-    return Math.abs(x - SHAFT_SCENE.x) < SHAFT_SCENE.w / 2 + 1;
-  }
-
-  /** Each level's service ceiling, walkway, pillars and name. */
-  private buildLevels(state: FacilityState) {
-    const metal = standard("#262b35", { metalness: 0.8, roughness: 0.4 });
-    const pipeMat = standard("#4b5563", { metalness: 0.9, roughness: 0.3 });
-    const pillar = standard("#1f2430", { metalness: 0.8, roughness: 0.35 });
-    for (const level of this.layout.levels) {
-      const wing = state.wings.find((w) => w.id === level.wingId);
-      const r: Rect = level.rect;
-      const x0 = sceneX(r.x);
-      const x1 = sceneX(r.x + r.w);
-      const cx = (x0 + x1) / 2;
-      const top = sceneY(r.y);
-      const floor = sceneY(level.floorY);
-      const bot = sceneY(r.y + r.h);
-      const roomTop = top - 2.6;
-      const d = ROCK_FRONT - BACK_Z;
-      const zMid = (ROCK_FRONT + BACK_Z) / 2;
-
-      // Service ceiling with pipes and the level's name.
-      this.add(place(box(x1 - x0, top - roomTop, d, metal), cx, (top + roomTop) / 2, zMid));
-      for (let i = 0; i < 3; i++) {
-        const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, x1 - x0, 10), pipeMat);
-        pipe.rotation.z = Math.PI / 2;
-        this.add(place(pipe, cx, roomTop + 0.5 + i * 0.5, ROCK_FRONT + 0.1));
-      }
-      const colour = wing?.sealed ? "#71717a" : (wing?.color ?? "#94a3b8");
-      const name = plate(`B${level.index + 1} · ${wing?.name.toUpperCase() ?? ""}`, 1.7, {
-        color: colour,
-        background: "rgba(2,6,23,0.92)",
-        border: colour,
-      });
-      const nw = (name.geometry as THREE.PlaneGeometry).parameters.width;
-      this.add(place(name, x0 + 1 + nw / 2, (top + roomTop) / 2 + 0.2, ROCK_FRONT + 0.45));
-      const strip = glow(colour, wing?.sealed ? 0.3 : 1.4);
-      this.add(place(box(x1 - x0, 0.1, 0.1, strip), cx, roomTop - 0.05, ROCK_FRONT + 0.2));
-
-      // Walkway under the rooms, with a hazard edge.
-      this.add(place(box(x1 - x0, floor - bot, d, metal), cx, (floor + bot) / 2 - 0.4, zMid));
-      this.add(place(box(x1 - x0, 0.12, 0.3, glow(0xf59e0b, 0.6)), cx, floor - 0.35, ROCK_FRONT + 0.1));
-
-      // Pillars between rooms.
-      const xs = new Set<number>();
-      for (const rl of this.layout.rooms.values()) {
-        if (rl.level !== level.index) continue;
-        xs.add(Math.round(rl.rect.x));
-        xs.add(Math.round(rl.rect.x + rl.rect.w));
-      }
-      for (const px of xs) {
-        const x = sceneX(px);
-        this.add(place(box(1.2, top - bot, 1.2, pillar), x, (top + bot) / 2, ROCK_FRONT - 0.2));
-      }
-
-      this.frameOpening(x0, x1, top, bot);
-    }
-  }
-
-  /**
-   * A steel I-beam frame bolted round the opening of each level, with the
-   * rough-cut rock edge around it, so each level reads as dug out of the ground.
-   */
-  private frameOpening(x0: number, x1: number, top: number, bot: number) {
-    const steel = standard("#3b4250", { metalness: 0.9, roughness: 0.35 });
-    const flange = standard("#4b5563", { metalness: 0.9, roughness: 0.3 });
-    const z = ROCK_FRONT + 0.25;
-    const w = x1 - x0;
-    const h = top - bot;
-    for (const y of [top + 0.35, bot - 0.35]) {
-      this.add(place(box(w + 1.6, 0.7, 0.5, steel), (x0 + x1) / 2, y, z));
-      this.add(place(box(w + 1.6, 0.12, 0.9, flange), (x0 + x1) / 2, y + 0.35, z));
-      this.add(place(box(w + 1.6, 0.12, 0.9, flange), (x0 + x1) / 2, y - 0.35, z));
-    }
-    for (const x of [x0 - 0.45, x1 + 0.45]) {
-      this.add(place(box(0.7, h + 1.4, 0.5, steel), x, (top + bot) / 2, z));
-      this.add(place(box(0.12, h + 1.4, 0.9, flange), x - 0.35, (top + bot) / 2, z));
-      this.add(place(box(0.12, h + 1.4, 0.9, flange), x + 0.35, (top + bot) / 2, z));
-    }
-    // Rivets along the beams.
-    const rivets: [number, number][] = [];
-    for (let x = x0; x <= x1; x += 2.4) rivets.push([x, top + 0.35], [x, bot - 0.35]);
-    for (let y = bot; y <= top; y += 2.4) rivets.push([x0 - 0.45, y], [x1 + 0.45, y]);
-    const rivetMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.1, 6, 6), flange, rivets.length);
-    const m = new THREE.Matrix4();
-    rivets.forEach(([x, y], i) => rivetMesh.setMatrixAt(i, m.makeTranslation(x, y, z + 0.27)));
-    this.add(rivetMesh);
-
-    // Broken rock lumps around the frame.
-    const lumps: [number, number, number][] = [];
-    let seed = Math.abs(x0 * 7 + top * 13);
-    const rand = () => {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
-    };
-    for (let x = x0 - 1; x <= x1 + 1; x += 1.3 + rand()) {
-      lumps.push([x, top + 1 + rand() * 0.6, 0.5 + rand() * 0.7], [x, bot - 1 - rand() * 0.6, 0.5 + rand() * 0.7]);
-    }
-    for (let y = bot - 1; y <= top + 1; y += 1.3 + rand()) {
-      lumps.push([x0 - 1.4 - rand() * 0.6, y, 0.5 + rand() * 0.7], [x1 + 1.4 + rand() * 0.6, y, 0.5 + rand() * 0.7]);
-    }
-    const rockMat = standard("#5b4a3c", { roughness: 1, flatShading: true });
-    const lumpMesh = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), rockMat, lumps.length);
-    const q = new THREE.Quaternion();
-    const e = new THREE.Euler();
-    lumps.forEach(([x, y, size], i) => {
-      e.set(rand() * 3, rand() * 3, rand() * 3);
-      m.compose(new THREE.Vector3(x, y, ROCK_FRONT - 0.1), q.setFromEuler(e), new THREE.Vector3(size, size * (0.7 + rand() * 0.5), size * 0.7));
-      lumpMesh.setMatrixAt(i, m);
-    });
-    this.add(lumpMesh);
-  }
-
-  /** The glass lift shaft running from the surface dock down through every level. */
-  private buildShaft() {
-    const x = SHAFT_SCENE.x;
-    const w = SHAFT_SCENE.w;
-    const top = 0;
-    const bottom = sceneY(this.layout.shaft.y + this.layout.shaft.h);
-    const h = top - bottom;
-    const cy = (top + bottom) / 2;
-    const frame = standard("#334155", { metalness: 0.9, roughness: 0.3 });
-    this.add(place(box(w, h, 0.3, standard("#0b1220", { metalness: 0.6 })), x, cy, BACK_Z - 0.2));
-    for (const dx of [-w / 2 + 0.25, w / 2 - 0.25]) {
-      this.add(place(box(0.5, h, 0.5, frame), x + dx, cy, FRONT_Z));
-      this.add(place(box(0.3, h, 0.3, frame), x + dx, cy, BACK_Z + 0.3));
-      this.add(place(box(0.15, h, 0.15, glow(0x38bdf8, 1.6)), x + dx * 0.75, cy, BACK_Z + 0.1));
-    }
-    for (let y = top - 2; y > bottom; y -= 3) {
-      this.add(place(box(w, 0.18, 0.3, frame), x, y, FRONT_Z));
-    }
-    const glass = new THREE.MeshStandardMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.1, depthWrite: false });
-    this.add(place(box(w - 1, h, 0.1, glass), x, cy, FRONT_Z + 0.3));
-    this.add(place(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, h, 6), standard("#94a3b8", { metalness: 1 })), x, cy, BACK_Z + 1));
-    // Light pulses running down the shaft.
-    const pulses: THREE.Mesh[] = [];
-    for (let i = 0; i < 3; i++) {
-      const p = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 10), glow(0x7dd3fc, 4));
-      pulses.push(p);
-      this.add(place(p, x, 0, BACK_Z + 1));
-    }
-    this.add(place(label("LIFT", 0.7, { color: "#7dd3fc", background: "rgba(2,6,23,0.8)", size: 40 }), x, 1.6, FRONT_Z));
-    this.ambient.push((t) => {
-      pulses.forEach((p, i) => (p.position.y = top - ((t * 9 + (i * h) / 3) % h)));
-    });
-  }
+function clamp(v: number, lo: number, hi: number) {
+  return Math.min(hi, Math.max(lo, v));
 }

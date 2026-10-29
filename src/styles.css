@@ -609,6 +609,20 @@ button:disabled {
   }
 }
 
+.view-hint-touch {
+  display: none;
+}
+
+/* Phones and tablets get the touch gestures instead of mouse ones. */
+@media (pointer: coarse), (max-width: 700px) {
+  .view-hint-wide {
+    display: none;
+  }
+  .view-hint-touch {
+    display: inline;
+  }
+}
+
 .view-hint {
   position: absolute;
   left: 50%;

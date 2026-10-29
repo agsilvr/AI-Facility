@@ -1,17 +1,26 @@
 import * as THREE from "three";
 import type { Agent, FacilityState } from "../core/types";
-import type { Walker } from "../facility/movement";
-import { SHAFT_SCENE, sceneX, sceneY, WALK_Z } from "./coords";
 import { box, glow, label, place, standard } from "./parts";
 
 // A crew member: a little astronaut in their own colours who walks, rides the
 // lift and shows what they're doing above their head (progress while working,
 // "zz" when idle, a pause sign when the owner paused them).
 
+/** Where a crew member is this frame, and what they're doing with their legs. */
+export interface Pose {
+  x: number;
+  y: number;
+  z: number;
+  /** Direction to face, in radians: 0 faces the viewer (+z). */
+  heading: number;
+  walking: boolean;
+  riding: boolean;
+}
+
 export interface CrewView {
   agentId: string;
   group: THREE.Group;
-  update(agent: Agent, walker: Walker, state: FacilityState, time: number, selected: boolean, hovered: boolean): void;
+  update(agent: Agent, pose: Pose, state: FacilityState, time: number, selected: boolean, hovered: boolean): void;
 }
 
 const SCALE = 1.7;
@@ -125,25 +134,21 @@ export function buildCrew(agent: Agent): CrewView {
   return {
     agentId: agent.id,
     group,
-    update(current, walker, state, time, selected, hovered) {
-      const x = sceneX(walker.x);
-      const y = sceneY(walker.y);
-      // Riding the lift: in the shaft and moving up or down.
-      const riding = Math.abs(x - SHAFT_SCENE.x) < 0.05 && walker.moving && y !== group.position.y;
-      group.position.set(x, y, WALK_Z);
+    update(current, pose, state, time, selected, hovered) {
+      const { riding, walking } = pose;
+      group.position.set(pose.x, pose.y, pose.z);
 
-      // Turn toward the direction of travel; face the viewer when standing.
-      const goal = walker.moving && !riding ? walker.facing * (Math.PI / 2) : 0;
-      heading += (goal - heading) * 0.15;
+      // Turn smoothly the short way round.
+      const turn = Math.atan2(Math.sin(pose.heading - heading), Math.cos(pose.heading - heading));
+      heading += turn * 0.15;
       body.rotation.y = heading;
 
-      const walking = walker.moving && !riding;
       const swing = walking ? Math.sin(time * 10) * 0.6 : 0;
       legs[0].rotation.x = swing;
       legs[1].rotation.x = -swing;
       arms[0].rotation.x = -swing * 0.8;
       arms[1].rotation.x = swing * 0.8;
-      const working = current.status === "working" && !walker.moving;
+      const working = current.status === "working" && !walking && !riding;
       // At work: hands busy at a console; idle: a slow breath.
       if (working) {
         arms[0].rotation.x = -1 + Math.sin(time * 8) * 0.25;
@@ -163,7 +168,7 @@ export function buildCrew(agent: Agent): CrewView {
       barBack.visible = showBar;
       barFill.visible = showBar;
       barFill.scale.set(Math.max(0.02, 1.6 * (task?.progress ?? 0)), 0.2, 1);
-      zz.visible = current.status === "idle" && !walker.moving;
+      zz.visible = current.status === "idle" && !walking && !riding;
       zz.position.y = 5.2 + ((time * 0.4) % 1) * 0.4;
       (zz.material as THREE.SpriteMaterial).opacity = 1 - ((time * 0.4) % 1);
       paused.visible = current.status === "paused";

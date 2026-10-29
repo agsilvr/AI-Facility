@@ -46,7 +46,7 @@ export function Facility3DView({ ledger, selection, onSelect, onUnsupported }: P
       const width = wrap.clientWidth;
       // The facility is wider than it is tall, so size the view to match it.
       // On phones leave room above and below for the level buttons and the hint.
-      const height = Math.round(Math.min(Math.max(width * (width < 600 ? 0.98 : 0.74), 320), window.innerHeight - 110));
+      const height = Math.round(Math.min(Math.max(width * (width < 600 ? 0.9 : 0.74), 320), window.innerHeight - 110));
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       scene.resize(width, height);
@@ -107,7 +107,7 @@ export function Facility3DView({ ledger, selection, onSelect, onUnsupported }: P
     return `${agent.name} · ${agent.status === "working" && task ? task.title : agent.status}`;
   };
 
-  // Tell a click from a drag: dragging turns the camera, clicking selects.
+  // Tell a click from a drag: dragging moves the camera, clicking selects.
   const handlePointerDown = (e: React.PointerEvent) => {
     down.current = { x: e.clientX, y: e.clientY };
     setHint(false);
@@ -131,7 +131,7 @@ export function Facility3DView({ ledger, selection, onSelect, onUnsupported }: P
         onPointerMove={handlePointerMove}
         onPointerLeave={handlePointerLeave}
         role="img"
-        aria-label="3D underground facility showing rooms and crew. Drag to turn, scroll or pinch to zoom."
+        aria-label="3D underground facility seen from above, showing rooms and crew. Drag to move, right-drag or two fingers to turn, scroll or pinch to zoom."
       />
       <nav className="view-levels" aria-label="Fly to a level">
         <button type="button" onClick={() => sceneRef.current?.overview()}>
@@ -158,7 +158,10 @@ export function Facility3DView({ ledger, selection, onSelect, onUnsupported }: P
           {tip.text}
         </div>
       )}
-      {hint && <p className="view-hint">Drag to look · scroll or pinch to zoom · click to inspect</p>}
+      {hint && <p className="view-hint">
+          <span className="view-hint-wide">Drag to move · right-drag to turn · scroll to zoom · click to inspect</span>
+          <span className="view-hint-touch">Drag to move · pinch or twist · tap to inspect</span>
+        </p>}
     </div>
   );
 }

@@ -13,11 +13,26 @@ describe("camera framing", () => {
     expect(wide).toBeCloseTo(40 / (2 * Math.tan(Math.PI / 12)));
   });
 
-  it("looks at the centre of a room from in front of it", () => {
-    const f = focusOn({ x0: 10, x1: 30, top: -5, bottom: -15 }, 30, 1.6);
-    expect(f.target).toEqual([20, -10, 0]);
-    expect(f.position[2]).toBeGreaterThan(20);
-    expect(f.position[0]).toBeGreaterThan(20);
+  it("looks down at the centre of an area from above and in front", () => {
+    const area = { x0: 10, x1: 30, z0: -5, z1: 5, y: -7, h: 5 };
+    const f = focusOn(area, 30, 1.6, 1.3, 0.9, 0);
+    expect(f.target[0]).toBe(20);
+    expect(f.target[2]).toBe(0);
+    expect(f.position[0]).toBeCloseTo(20);
+    expect(f.position[1]).toBeGreaterThan(f.target[1]);
+    expect(f.position[2]).toBeGreaterThan(f.target[2]);
+    // Looking down at the chosen angle.
+    const flat = Math.hypot(f.position[0] - f.target[0], f.position[2] - f.target[2]);
+    expect(Math.atan2(f.position[1] - f.target[1], flat)).toBeCloseTo(0.9);
+  });
+
+  it("backs off further for a bigger area, and turns with the azimuth", () => {
+    const small = focusOn({ x0: 0, x1: 10, z0: 0, z1: 10, y: 0, h: 5 }, 30, 1.6);
+    const big = focusOn({ x0: 0, x1: 100, z0: 0, z1: 10, y: 0, h: 5 }, 30, 1.6);
+    const reach = (f: typeof small) => Math.hypot(...f.position.map((v, i) => v - f.target[i]));
+    expect(reach(big)).toBeGreaterThan(reach(small));
+    const turned = focusOn({ x0: 0, x1: 10, z0: 0, z1: 10, y: 0, h: 5 }, 30, 1.6, 1.3, 0.9, 0.5);
+    expect(turned.position[0]).toBeGreaterThan(turned.target[0]);
   });
 
   it("eases smoothly from start to end", () => {
