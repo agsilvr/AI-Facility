@@ -2,7 +2,7 @@ import { useState } from "react";
 import { completedCount, completedKey } from "../core/ledger";
 import type { FacilityPort } from "../core/port";
 import type { Draft, FacilityState, Flag } from "../core/types";
-import type { Selection } from "../facility/render";
+import type { Selection } from "../facility/status";
 import { money, stageLabel, timeAgo } from "./format";
 
 type Tab = "attention" | "flow" | "crew" | "log";

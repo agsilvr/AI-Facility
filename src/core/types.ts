@@ -7,7 +7,7 @@ export type AgentId = string;
 export type TaskId = string;
 export type ApprovalId = string;
 
-/** A business, or the shared core. Each wing is one underground level. */
+/** A business, or the shared core. Each wing is one district of the underground facility. */
 export interface Wing {
   id: WingId;
   name: string;
@@ -47,19 +47,25 @@ export type ActionId = "etsy.publishListing" | "etsy.sendReply" | "internal.file
 
 export type RoomKind =
   | "command"
+  | "security"
   | "vault"
   | "lab"
   | "studio"
-  | "bay"
+  | "factory"
   | "comms"
   | "dock"
   | "sealed";
+
+/** What a factory line makes, which decides how it looks. Each business picks its own. */
+export type FactoryTheme = "clothing" | "prints" | "goods";
 
 export interface Room {
   id: RoomId;
   wingId: WingId;
   name: string;
   kind: RoomKind;
+  /** For a factory: what it makes. */
+  theme?: FactoryTheme;
 }
 
 export type AgentStatus = "idle" | "working" | "waiting" | "paused";
