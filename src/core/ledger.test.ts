@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { dispatch } from "./dispatch";
 import { completedCount, Ledger } from "./ledger";
 import { initialState } from "./seed";
+import type { Draft } from "./types";
+
+const LISTING: Draft = {
+  kind: "listing",
+  title: "Moon print",
+  description: "A moon print, drafted with AI assistance and finished by hand.",
+  tags: ["moon", "print"],
+  priceUsd: 18,
+};
+const REPLY: Draft = { kind: "reply", message: "Thanks, it ships tomorrow." };
 
 function setup() {
   let t = 1_000;
@@ -13,7 +23,11 @@ function runStage(ledger: Ledger, taskId: string) {
   dispatch(ledger);
   expect(ledger.task(taskId)?.state).toBe("active");
   expect(ledger.work(taskId, 1, 0.01)).toBe(true);
-  ledger.finishStage(taskId, "note");
+  // Approval stages always produce a draft for the owner to review.
+  const task = ledger.task(taskId)!;
+  const stage = ledger.stagesOf(task)[task.stageIndex];
+  const draft = stage.needsApproval ? (task.workflowId === "message" ? REPLY : LISTING) : undefined;
+  ledger.finishStage(taskId, "note", { draft });
 }
 
 describe("Ledger", () => {

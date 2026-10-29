@@ -1,6 +1,7 @@
 import { Ledger } from "../src/core/ledger";
 import type { Control } from "../src/core/port";
-import { initialState } from "../src/core/seed";
+import { assertSafeWorkflows } from "../src/core/policy";
+import { initialState, rooms, wings } from "../src/core/seed";
 import { DemoSimulation } from "../src/sim/demo";
 import type { Store } from "./store";
 
@@ -22,9 +23,15 @@ export class Facility {
   private controlListeners = new Set<() => void>();
 
   constructor(private store: Store) {
+    // Wings and rooms are configuration, not data: always take them from the
+    // code, and refuse to start if any workflow breaks the safety policy.
+    assertSafeWorkflows(wings);
     const saved = store.load();
-    this.ledger = new Ledger(saved ? Ledger.recover(saved) : initialState());
+    this.ledger = new Ledger(saved ? { ...Ledger.recover(saved), wings, rooms } : initialState());
     this.sim = new DemoSimulation(this.ledger);
+    // A pause is the kill switch, so it survives a restart: if the owner
+    // stopped the facility, it stays stopped until they start it again.
+    if (store.getSetting("paused") === "true") this.control = { ...this.control, running: false };
     this.ledger.subscribe(() => {
       this.dirty = true;
     });
@@ -63,6 +70,7 @@ export class Facility {
       this.ledger.log(next.running ? "Facility resumed" : "Facility paused by owner", "info");
     }
     this.control = next;
+    this.store.setSetting("paused", String(!next.running));
     for (const l of this.controlListeners) l();
   }
 

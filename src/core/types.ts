@@ -34,7 +34,16 @@ export interface Stage {
   roomId: RoomId;
   /** Work in this stage waits for the owner's approval before it moves on. */
   needsApproval?: boolean;
+  /**
+   * An outward action (publish, send, spend) carried out by plain code, never
+   * by an AI. Only allowed straight after an approval stage, and only with the
+   * exact content the owner approved. See src/core/policy.ts.
+   */
+  action?: ActionId;
 }
+
+/** Outward actions the facility knows how to perform. */
+export type ActionId = "etsy.publishListing" | "etsy.sendReply" | "internal.fileBriefing";
 
 export type RoomKind =
   | "command"
@@ -91,6 +100,37 @@ export interface Task {
   updatedAt: number;
   /** Short notes produced at each stage, shown in the inspector. */
   notes: string[];
+  /** The latest structured output an agent produced, e.g. a listing or a reply. */
+  draft?: Draft;
+  /** Safety findings about the draft or the inputs it was made from. */
+  flags: Flag[];
+  /** Exact serialised draft the owner approved; an action may only use this. */
+  approvedContent?: string;
+}
+
+export interface ListingDraft {
+  kind: "listing";
+  title: string;
+  description: string;
+  tags: string[];
+  priceUsd: number;
+}
+
+export interface ReplyDraft {
+  kind: "reply";
+  message: string;
+}
+
+export type Draft = ListingDraft | ReplyDraft;
+
+/**
+ * "block" means the content can't be approved as it stands; it has to be sent
+ * back. "warn" is shown on the approval card for the owner to judge.
+ */
+export interface Flag {
+  level: "block" | "warn";
+  code: string;
+  message: string;
 }
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
@@ -100,6 +140,9 @@ export interface Approval {
   taskId: TaskId;
   wingId: WingId;
   summary: string;
+  /** The draft exactly as shown to the owner, so approval binds to it. */
+  content?: string;
+  flags: Flag[];
   status: ApprovalStatus;
   createdAt: number;
   decidedAt?: number;

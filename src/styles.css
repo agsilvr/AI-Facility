@@ -492,3 +492,55 @@ button.primary {
   padding: 8px 20px;
   font-size: 12px;
 }
+
+.draft {
+  background: #0b0f15;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.draft p {
+  margin: 6px 0;
+}
+
+.draft-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.flags {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flag-block {
+  color: #fecaca;
+  background: rgba(220, 38, 38, 0.18);
+  border-left: 3px solid var(--alert);
+  padding: 4px 8px;
+}
+
+.flag-warn {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.14);
+  border-left: 3px solid var(--warn);
+  padding: 4px 8px;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

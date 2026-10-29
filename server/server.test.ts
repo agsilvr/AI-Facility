@@ -1,4 +1,8 @@
+import { mkdtempSync, rmSync } from "node:fs";
 import { request } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { dispatch } from "../src/core/dispatch";
@@ -28,6 +32,60 @@ describe("Store", () => {
   });
 });
 
+describe("Audit trail", () => {
+  const entry = {
+    at: 1,
+    purpose: "etsy-reply",
+    source: "etsy buyer message",
+    inputSha256: "a".repeat(64),
+    outputSha256: null,
+    ok: false,
+    error: "Claude Code exited with 1",
+    costUsd: 0,
+    flags: ["possible-injection"],
+  };
+
+  it("records every AI call", () => {
+    const store = new Store(":memory:");
+    store.addAudit(entry);
+    store.addAudit({ ...entry, at: 2, ok: true, error: null, outputSha256: "b".repeat(64) });
+    const [latest, first] = store.auditEntries();
+    expect(first).toEqual(entry);
+    expect(latest).toMatchObject({ at: 2, ok: true });
+  });
+
+  it("can't be edited or deleted, even with direct database access", () => {
+    const dir = mkdtempSync(join(tmpdir(), "facility-audit-"));
+    try {
+      const path = join(dir, "facility.db");
+      const store = new Store(path);
+      store.addAudit(entry);
+      const db = new DatabaseSync(path);
+      expect(() => db.exec("UPDATE audit SET ok = 1")).toThrow(/append-only/);
+      expect(() => db.exec("DELETE FROM audit")).toThrow(/append-only/);
+      db.close();
+      expect(store.auditEntries()).toHaveLength(1);
+      store.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Kill switch", () => {
+  it("stays off after a restart until the owner turns the facility back on", () => {
+    const store = new Store(":memory:");
+    new Facility(store).setControl({ running: false });
+    const restarted = new Facility(store);
+    expect(restarted.getControl().running).toBe(false);
+    const before = restarted.ledger.getState().tasks.length;
+    for (let i = 0; i < 100; i++) restarted.tick(1);
+    expect(restarted.ledger.getState().tasks.length).toBe(before);
+    restarted.setControl({ running: true });
+    expect(new Facility(store).getControl().running).toBe(true);
+  });
+});
+
 describe("HTTP API", () => {
   let facility: Facility;
   let base: string;
@@ -54,7 +112,7 @@ describe("HTTP API", () => {
     const task = ledger.createTask("etsy", "message", "Question");
     dispatch(ledger);
     ledger.work(task.id, 1, 0);
-    ledger.finishStage(task.id, "draft");
+    ledger.finishStage(task.id, "draft", { draft: { kind: "reply", message: "Thanks, it ships tomorrow." } });
     return ledger.getState().approvals[0].id;
   }
 
@@ -70,6 +128,18 @@ describe("HTTP API", () => {
     const res = await post(`/api/approvals/${id}`, { approve: true });
     expect(res.status).toBe(200);
     expect(facility.ledger.getState().approvals[0].status).toBe("approved");
+  });
+
+  it("refuses to approve content with a blocking safety finding", async () => {
+    const { ledger } = facility;
+    const task = ledger.createTask("etsy", "message", "Question");
+    dispatch(ledger);
+    ledger.work(task.id, 1, 0);
+    ledger.finishStage(task.id, "draft", { draft: { kind: "reply", message: "Pay me on PayPal" } });
+    const id = ledger.getState().approvals[0].id;
+    const res = await post(`/api/approvals/${id}`, { approve: true });
+    expect(res.status).toBe(409);
+    expect(ledger.getState().approvals[0].status).toBe("pending");
   });
 
   it("refuses approvals from another website", async () => {
