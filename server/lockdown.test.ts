@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-// The Claude Code settings that fence in any AI working on this repository.
-// These tests fail if a later change quietly loosens them.
+// The Claude Code and Codex settings that fence in any AI working on this
+// repository. These tests fail if a later change quietly loosens them.
 
 const settings = JSON.parse(readFileSync(new URL("../.claude/settings.json", import.meta.url), "utf8"));
 const deny: string[] = settings.permissions.deny;
@@ -54,5 +54,28 @@ describe("Claude Code lockdown settings", () => {
 
   it("writes outside the folder only to the npm cache and the facility's own start-up file", () => {
     expect(settings.sandbox.filesystem.allowWrite).toEqual(["~/.npm", "~/Library/LaunchAgents/com.aifacility.server.plist"]);
+  });
+});
+
+// Codex's file is TOML; its few settings are plain `key = value` lines.
+const codex = readFileSync(new URL("../.codex/config.toml", import.meta.url), "utf8");
+const codexSetting = (key: string) => codex.match(new RegExp(`^${key}\\s*=\\s*(.+)$`, "m"))?.[1].trim();
+
+describe("Codex lockdown settings", () => {
+  it("writes only inside the facility folder and asks before anything more", () => {
+    expect(codexSetting("sandbox_mode")).toBe('"workspace-write"');
+    expect(codexSetting("approval_policy")).toBe('"on-request"');
+  });
+
+  it("has no network from its commands", () => {
+    expect(codexSetting("network_access")).toBe("false");
+  });
+
+  it("gives its commands no keys or tokens", () => {
+    expect(codexSetting("inherit")).toBe('"core"');
+  });
+
+  it("can't be widened from inside the file", () => {
+    expect(codex).not.toMatch(/danger-full-access|"never"|mcp_servers|trust_level|default_permissions/);
   });
 });
