@@ -39,6 +39,7 @@ const ROOM_SIZE: Record<RoomKind, [number, number]> = {
   security: [11, 6],
   vault: [9, 6],
   lab: [11, 6],
+  qc: [13, 7],
   studio: [11, 6],
   factory: [16, 6],
   comms: [10, 6],
@@ -57,6 +58,7 @@ const STATIONS: Record<RoomKind, number[]> = {
   security: [0.2, 0.8],
   vault: [0.22],
   lab: [0.18, 0.4, 0.76],
+  qc: [0.24, 0.76],
   studio: [0.24, 0.76, 0.6],
   factory: [0.14, 0.32, 0.68, 0.86],
   comms: [0.22, 0.78],
@@ -111,6 +113,7 @@ export interface WingLayout {
 }
 
 export interface FacilityLayout {
+  corridors?: Rect[];
   width: number;
   height: number;
   hall: Rect;
@@ -219,7 +222,7 @@ function stretch(row: Room[], width: number): number[] {
   return widths;
 }
 
-export function buildLayout(wings: Wing[], rooms: Room[]): FacilityLayout {
+function buildLinearLayout(wings: Wing[], rooms: Room[]): FacilityLayout {
   const coreId = coreWingId(wings, rooms);
   const ordered = [...wings.filter((w) => w.id === coreId), ...wings.filter((w) => w.id !== coreId)];
   const districts = ordered.map((wing, i) => {
@@ -264,6 +267,39 @@ export function buildLayout(wings: Wing[], rooms: Room[]): FacilityLayout {
   const heartRect = heart && roomLayouts.get(heart.id)?.rect;
   const center = heartRect ? { x: heartRect.x + heartRect.w / 2, y: hallY } : { x: width / 2, y: height / 2 };
   return { width, height, hall, laneY, rooms: roomLayouts, wings: wingLayouts, center };
+}
+
+/** A central bridge with service spurs and a left-to-right production trail. */
+export function buildLayout(wings: Wing[], rooms: Room[]): FacilityLayout {
+  if (!rooms.some((r) => r.id === "command")) return buildLinearLayout(wings, rooms);
+  const hallY = 456;
+  const laneY = hallY + HALL_H / 2;
+  const roomLayouts = new Map<RoomId, RoomLayout>();
+  const positions: Record<string, [number, number, number, number, "top" | "bottom"]> = {
+    command: [700, 64, 456, 164, "top"], vault: [432, 128, 168, 140, "top"], security: [1220, 128, 200, 140, "top"],
+    "etsy-lab": [80, 312, 216, 132, "top"], "etsy-studio": [340, 528, 248, 164, "bottom"],
+    "etsy-qc": [640, 312, 216, 132, "top"], "etsy-factory": [900, 528, 280, 164, "bottom"],
+    dock: [1250, 528, 216, 140, "bottom"], "etsy-comms": [1464, 312, 176, 132, "top"],
+    "expansion-1": [80, 760, 184, 124, "bottom"],
+  };
+  let extraX = 1720;
+  for (const room of rooms) {
+    const pos = positions[room.id];
+    const [x, y, w, h, side] = pos ?? [extraX, hallY - roomHeight(room.kind) - 12, roomWidth(room.kind), roomHeight(room.kind), "top"];
+    roomLayouts.set(room.id, placeRoom(room, { x, y, w, h }, side, laneY));
+    if (!pos) extraX += w + 48;
+  }
+  const right = Math.max(1640, ...[...roomLayouts.values()].map((r) => r.rect.x + r.rect.w));
+  const hall = { x: 64, y: hallY, w: right - 48, h: HALL_H };
+  const corridors = [hall, ...[...roomLayouts.values()].map((r) => {
+    const edge = r.side === "top" ? r.rect.y + r.rect.h - 4 : r.rect.y + WALL;
+    return { x: r.door.inside.x - 18, y: Math.min(edge, laneY), w: 36, h: Math.abs(edge - laneY) + 2 };
+  })];
+  const wingLayouts = wings.map((wing, i) => {
+    const own = [...roomLayouts.values()].filter((r) => r.wingId === wing.id);
+    return { wingId: wing.id, slot: wing.id === "core" ? 0 : wing.sealed ? -1 : i, x0: own.length ? Math.min(...own.map((r) => r.rect.x)) : right, x1: own.length ? Math.max(...own.map((r) => r.rect.x + r.rect.w)) : right };
+  });
+  return { width: right + 64, height: 932, hall, laneY, corridors, rooms: roomLayouts, wings: wingLayouts, center: { x: 928, y: 484 } };
 }
 
 function placeRoom(room: Room, rect: Rect, side: "top" | "bottom", laneY: number): RoomLayout {

@@ -9,6 +9,8 @@ import {
   wingArea,
   zoomAround,
   zoomToFit,
+  MAX_ZOOM,
+  minZoom,
   type Camera,
   type Viewport,
 } from "./camera";
@@ -53,12 +55,15 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
   const camera = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
   const view = useRef<Viewport>({ width: 1, height: 1 });
   const flight = useRef<Flight | null>(null);
+  const zoomMotion = useRef<{ zoom: number; screen: { x: number; y: number } } | null>(null);
 
   const setCamera = (next: Camera) => {
     flight.current = null;
+    zoomMotion.current = null;
     camera.current = clampCamera(next, layout, view.current);
   };
   const flyTo = (to: Camera) => {
+    zoomMotion.current = null;
     const target = clampCamera(to, layout, view.current);
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) setCamera(target);
     else flight.current = { from: camera.current, to: target, t: 0 };
@@ -78,14 +83,18 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
 
     const resize = () => {
       const width = wrap.clientWidth;
-      const height = Math.round(Math.max(340, Math.min(720, window.innerHeight - 150, width < 600 ? width * 1.2 : Infinity)));
+      const height = Math.max(1, wrap.clientHeight);
       const dpr = window.devicePixelRatio || 1;
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       view.current = { width, height };
-      camera.current = placed ? clampCamera(camera.current, layout, view.current) : startCamera(layout, view.current);
+      const selected = selectionRef.current;
+      const selectedRoom = selected?.kind === "room" ? layout.rooms.get(selected.id)
+        : selected?.kind === "agent" ? layout.rooms.get(ledger.getState().agents.find((a) => a.id === selected.id)?.roomId ?? "") : undefined;
+      camera.current = placed && selectedRoom ? focusCamera(selectedRoom.rect, layout, view.current, 1.4, 3)
+        : startCamera(layout, view.current);
       placed = true;
     };
     const observer = new ResizeObserver(resize);
@@ -118,6 +127,13 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
           zoom: f.from.zoom + (f.to.zoom - f.from.zoom) * k,
         };
         if (f.t >= 1) flight.current = null;
+      }
+
+      if (zoomMotion.current) {
+        const motion = zoomMotion.current;
+        const next = camera.current.zoom + (motion.zoom - camera.current.zoom) * (1 - Math.exp(-dt * 16));
+        camera.current = clampCamera(zoomAround(camera.current, next, motion.screen, view.current), layout, view.current);
+        if (Math.abs(next - motion.zoom) < .001) zoomMotion.current = null;
       }
 
       const dpr = window.devicePixelRatio || 1;
@@ -221,7 +237,13 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     if (e.deltaY === 0) return;
     setHint(false);
-    setCamera(zoomAround(camera.current, stepZoom(camera.current.zoom, e.deltaY < 0 ? 1 : -1), local(e), view.current));
+    flight.current = null;
+    const base = zoomMotion.current?.zoom ?? camera.current.zoom;
+    const delta = Math.max(-120, Math.min(120, e.deltaY * (e.deltaMode === 1 ? 16 : 1)));
+    const zoom = Math.max(minZoom(layout, view.current), Math.min(MAX_ZOOM, base * Math.exp(-delta * .002)));
+    const screen = local(e);
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) setCamera(zoomAround(camera.current, zoom, screen, view.current));
+    else zoomMotion.current = { zoom, screen };
   };
 
   // Keyboard: arrow keys move, + and - zoom.
@@ -240,7 +262,7 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
     const next = keys[e.key];
     if (!next) return;
     e.preventDefault();
-    setCamera(next());
+    flyTo(next());
   };
 
   const describe = (hit: Selection) => {
@@ -281,18 +303,18 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
       />
       <nav className="map-buttons" aria-label="Jump to part of the facility">
         <button type="button" onClick={overview}>
-          Overview
+          Fit facility
         </button>
-        {initial.wings.map((wing) => (
+        {initial.wings.filter((wing) => !wing.sealed).map((wing) => (
           <button type="button" key={wing.id} style={{ borderColor: wing.sealed ? undefined : wing.color }} onClick={() => showWing(wing.id)}>
             {wing.name}
           </button>
         ))}
         <span className="map-zoom">
-          <button type="button" aria-label="Zoom out" onClick={() => setCamera({ ...camera.current, zoom: stepZoom(camera.current.zoom, -1) })}>
+          <button type="button" aria-label="Zoom out" onClick={() => flyTo({ ...camera.current, zoom: camera.current.zoom / 1.3 })}>
             −
           </button>
-          <button type="button" aria-label="Zoom in" onClick={() => setCamera({ ...camera.current, zoom: stepZoom(camera.current.zoom, 1) })}>
+          <button type="button" aria-label="Zoom in" onClick={() => flyTo({ ...camera.current, zoom: camera.current.zoom * 1.3 })}>
             +
           </button>
         </span>

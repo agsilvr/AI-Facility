@@ -1,4 +1,5 @@
 import type { Ledger } from "./ledger";
+import { canWorkStage } from "./capabilities";
 
 /**
  * Match queued tasks to idle agents in the same wing who have the skill for
@@ -18,7 +19,7 @@ export function dispatch(ledger: Ledger) {
     const agent = ledger
       .getState()
       .agents.find(
-        (a) => a.wingId === task.wingId && a.status === "idle" && !a.taskId && a.skills.includes(stage.id),
+        (a) => a.status === "idle" && !a.taskId && canWorkStage(a, task.wingId, stage),
       );
     if (agent) ledger.assign(task.id, agent.id);
   }

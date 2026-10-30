@@ -67,3 +67,9 @@ npm run build
 ```
 
 See `CLAUDE.md` for the rules every change must follow.
+
+## Command workspace iteration
+
+The warmer interface fills the left workspace with the branching facility and puts a Command journal, searchable workbench, Research notebook, Crew dossiers and Activity journal on the right. Click a crew member to see their actual assigned model, data access and work. Zoom is smooth and anchored to the pointer.
+
+Claude normally leads writing and briefings. Codex can take command temporarily through the official app connection. Handover retains jobs and approvals, fences late answers, and requires the owner's PIN when requested manually. Research tests can run on Qwen independently. Publishing and accounting remain unconnected. See [the design and handover notes](docs/DESIGN.md).

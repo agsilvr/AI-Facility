@@ -115,6 +115,22 @@ async function handle(facility: Facility, options: ServerOptions, req: IncomingM
       return sendJson(res, 200, { ok: true });
     }
 
+    if (path === "/api/operator") {
+      ownerOnly();
+      if ((body.active !== "claude" && body.active !== "codex") || !Number.isInteger(body.generation)) throw new HttpError(400, "Choose an operator and the current handover version");
+      if (!facility.handoff(body.active, body.generation as number)) throw new HttpError(409, "Command changed in another window. Review the current operator and try again.");
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (path === "/api/research") {
+      if (facility.getControl().mode !== "live") throw new HttpError(409, "Research is available in live mode");
+      if (!facility.getControl().running) throw new HttpError(409, "Resume the facility before starting research");
+      const previous = facility.ledger.getState().tasks.find((t) => t.workflowId === "research-test" && t.state !== "done");
+      const task = previous ?? facility.ledger.createTask("etsy", "research-test", "Seasonal print opportunities");
+      facility.save();
+      return sendJson(res, 200, { ok: true, taskId: task.id });
+    }
+
     const approval = path.match(/^\/api\/approvals\/([^/]+)$/);
     if (approval) {
       ownerOnly();

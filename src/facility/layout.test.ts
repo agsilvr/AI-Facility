@@ -30,54 +30,35 @@ describe("floor plan", () => {
       expect(r.door.outside.x).toBe(r.door.inside.x);
       expect(r.door.inside.x - DOOR_W / 2).toBeGreaterThan(r.rect.x);
       expect(r.door.inside.x + DOOR_W / 2).toBeLessThan(r.rect.x + r.rect.w);
-      if (r.side === "top") expect(r.rect.y + r.rect.h).toBe(layout.hall.y);
-      else expect(r.rect.y).toBe(layout.hall.y + layout.hall.h);
+      const corridor = layout.corridors!.find((c) => contains(c, r.door.inside.x, r.door.outside.y));
+      expect(corridor).toBeDefined();
     }
   });
 
-  it("puts the core in the middle, with the first business to its right and the next to its left", () => {
-    expect(layout.wings.map((w) => [w.wingId, w.slot])).toEqual([
-      ["expansion", -1],
-      ["core", 0],
-      ["etsy", 1],
-    ]);
-    for (let i = 1; i < layout.wings.length; i++) expect(layout.wings[i].x0).toBeGreaterThan(layout.wings[i - 1].x1);
-    for (const r of layout.rooms.values()) {
-      const wing = layout.wings.find((w) => w.wingId === r.wingId)!;
-      expect(r.rect.x).toBeGreaterThanOrEqual(wing.x0);
-      expect(r.rect.x + r.rect.w).toBeLessThanOrEqual(wing.x1);
-    }
-  });
-
-  it("puts the Command Center at the heart of the core, biggest room, with the core's other rooms across the hall", () => {
+  it("branches service rooms around the command bridge without forcing a rectangle", () => {
     const command = layout.rooms.get("command")!;
-    const core = layout.wings.find((w) => w.wingId === "core")!;
-    expect(command.side).toBe("top");
-    expect(command.rect.x + command.rect.w / 2).toBeCloseTo((core.x0 + core.x1) / 2, 0);
-    expect(layout.center.x).toBeCloseTo(command.rect.x + command.rect.w / 2);
-    for (const r of layout.rooms.values()) if (r !== command) expect(r.rect.w * r.rect.h).toBeLessThan(command.rect.w * command.rect.h);
-    const across = ["vault", "security", "dock"].map((id) => layout.rooms.get(id)!);
-    expect(across.map((r) => r.side)).toEqual(["bottom", "bottom", "bottom"]);
-    expect(across.map((r) => r.rect.x)).toEqual([...across.map((r) => r.rect.x)].sort((a, b) => a - b));
+    expect(command.rect.y).toBeLessThan(layout.rooms.get("vault")!.rect.y);
+    expect(layout.rooms.get("vault")!.rect.x).toBeLessThan(command.rect.x);
+    expect(layout.rooms.get("security")!.rect.x).toBeGreaterThan(command.rect.x + command.rect.w);
+    for (const room of layout.rooms.values()) if (room !== command) expect(room.rect.w * room.rect.h).toBeLessThan(command.rect.w * command.rect.h);
+    expect(layout.center.x).toBe(command.rect.x + command.rect.w / 2);
+    expect(layout.corridors!.length).toBeGreaterThan(1);
   });
 
-  it("lays a business out in the order its work flows, finishing next to the core", () => {
-    // Research, then design, then the factory, which is the Etsy room nearest the core.
-    const x = (id: string) => layout.rooms.get(id)!.rect.x;
-    const etsy = rooms.filter((r) => r.wingId === "etsy").map((r) => r.id);
-    expect(Math.min(...etsy.map(x))).toBe(x("etsy-factory"));
-    expect(x("etsy-lab")).toBeGreaterThan(x("etsy-factory"));
-    expect(x("etsy-studio")).toBeGreaterThan(x("etsy-comms"));
+  it("reads left to right from research through design, checks, publishing and outbox", () => {
+    const ids = ["etsy-lab", "etsy-studio", "etsy-qc", "etsy-factory", "dock"];
+    const xs = ids.map((id) => layout.rooms.get(id)!.door.outside.x);
+    expect(xs).toEqual([...xs].sort((a, b) => a - b));
+    const sides = ids.map((id) => layout.rooms.get(id)!.side);
+    expect(sides).toContain("top"); expect(sides).toContain("bottom");
   });
 
-  it("lines up both rows of a district, so each district is a tidy block", () => {
-    for (const wing of layout.wings) {
-      for (const side of ["top", "bottom"] as const) {
-        const row = [...layout.rooms.values()].filter((r) => r.wingId === wing.wingId && r.side === side);
-        if (!row.length) continue;
-        expect(Math.min(...row.map((r) => r.rect.x))).toBe(wing.x0);
-        expect(Math.max(...row.map((r) => r.rect.x + r.rect.w))).toBe(wing.x1);
-      }
+  it("keeps every room's connecting spur out of other rooms", () => {
+    for (const room of layout.rooms.values()) {
+      const x = room.door.inside.x;
+      const edge = room.side === "top" ? room.rect.y + room.rect.h : room.rect.y;
+      const spur = { x: x - 15, y: Math.min(edge, layout.laneY), w: 30, h: Math.abs(edge - layout.laneY) };
+      for (const other of layout.rooms.values()) if (other !== room) expect(overlaps(spur, other.rect), `${room.roomId} crosses ${other.roomId}`).toBe(false);
     }
   });
 
@@ -89,7 +70,7 @@ describe("floor plan", () => {
     for (const [id, r] of layout.rooms) expect(bigger.rooms.get(id)!.rect).toEqual({ ...r.rect, x: r.rect.x + shift });
     expect(bigger.width).toBeGreaterThan(layout.width);
     // The third business goes on the right, after the first.
-    expect(bigger.wings.find((w) => w.wingId === "candles")!.slot).toBe(2);
+    expect(bigger.rooms.get("candles-factory")!.rect.x).toBeGreaterThan(layout.width);
   });
 
   it("gives every room workstations on the stand line, clear of the walkway from its door", () => {
@@ -137,10 +118,10 @@ describe("rooms", () => {
     expect(core).toEqual(expect.arrayContaining(["command", "security", "vault", "dock"]));
   });
 
-  it("gives the Etsy wing a research lab and a factory line that makes clothing", () => {
+  it("gives the Etsy wing research, design, quality control and print publishing", () => {
     const etsy = rooms.filter((r) => r.wingId === "etsy");
-    expect(etsy.map((r) => r.kind)).toEqual(expect.arrayContaining(["lab", "studio", "factory", "comms"]));
-    expect(etsy.find((r) => r.kind === "factory")?.theme).toBe("clothing");
+    expect(etsy.map((r) => r.kind)).toEqual(expect.arrayContaining(["lab", "studio", "qc", "factory", "comms"]));
+    expect(etsy.find((r) => r.kind === "factory")?.theme).toBe("prints");
   });
 
   it("still lays out a room whose kind it doesn't know, such as one from older saved data", () => {

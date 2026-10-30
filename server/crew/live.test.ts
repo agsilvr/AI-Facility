@@ -6,7 +6,7 @@ import { Ledger } from "../../src/core/ledger";
 import { initialState } from "../../src/core/seed";
 import type { ReaderModel, ReaderRequest, ReaderResult } from "../agents/reader";
 import { Designs } from "./designs";
-import { LiveCrew } from "./live";
+import { LiveCrew, type Think } from "./live";
 
 const IDEA = { title: "Plant parent print", idea: "A cheerful print for houseplant lovers.", keywords: ["plants"], phrase: "Plant Parent" };
 const LISTING = {
@@ -24,13 +24,14 @@ afterEach(() => {
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
-function setup(answers: Partial<Record<string, ReaderResult>> = {}, qwen = true) {
+function setup(answers: Partial<Record<string, ReaderResult>> = {}, qwen = true, override?: Think) {
   const dir = mkdtempSync(join(tmpdir(), "facility-live-"));
   dirs.push(dir);
   const ledger = new Ledger(initialState(), () => Date.UTC(2026, 9, 29, 12));
   const calls: { model: ReaderModel; req: ReaderRequest }[] = [];
   const think = async (model: ReaderModel, req: ReaderRequest): Promise<ReaderResult> => {
     calls.push({ model, req });
+    if (override) return override(model, req);
     const fallback =
       req.purpose === "etsy-research" ? IDEA : req.purpose === "etsy-listing" ? LISTING : { summary: "All quiet today." };
     return answers[req.purpose] ?? { ok: true, output: fallback, inputFlags: [], costUsd: 0.01 };
@@ -119,4 +120,61 @@ describe("live crew", () => {
     expect(briefings).toHaveLength(1);
     expect(calls.filter((c) => c.req.purpose === "daily-briefing").map((c) => c.model)).toEqual(["claude"]);
   });
+
+  it("refuses a forged active assignment before calling a model", async () => {
+    const { ledger, calls, step } = setup();
+    const task = ledger.createTask("etsy", "research-test", "Wrong role");
+    Object.assign(task, { state: "active", agentId: "quill", model: "qwen", runToken: "forged" });
+    Object.assign(ledger.agent("quill")!, { status: "working", taskId: task.id });
+    await step();
+    expect(calls.some((c) => c.req.purpose === "public-research-test")).toBe(false);
+    expect(ledger.task(task.id)?.state).toBe("awaiting_approval");
+    expect(ledger.getState().approvals.find((a) => a.taskId === task.id)?.flags[0].message).toContain("permission check failed");
+  });
+
+  it("drops an in-flight answer when the agent's permission is revoked", async () => {
+    let release!: (value: ReaderResult) => void;
+    const pending = new Promise<ReaderResult>((resolve) => { release = resolve; });
+    const { ledger, step } = setup({}, true, async (_model, req) => req.purpose === "etsy-research" ? pending : { ok: true, output: { summary: "All quiet." }, inputFlags: [], costUsd: 0 });
+    await step();
+    await step();
+    const task = listing(ledger);
+    expect(task.state).toBe("active");
+    ledger.agent("scout")!.capability = "publish";
+    release({ ok: true, output: IDEA, inputFlags: [], costUsd: 0 });
+    await settle();
+    expect(ledger.task(task.id)).toMatchObject({ state: "awaiting_approval", stageIndex: 0 });
+    expect(ledger.task(task.id)?.brief).toBeUndefined();
+    expect(ledger.getState().approvals.find((a) => a.taskId === task.id)?.flags[0].message).toContain("permissions changed");
+  });
+
+  it("cannot apply an old research answer after a pause", async () => {
+    let release!: (value: ReaderResult) => void;
+    const pending = new Promise<ReaderResult>((resolve) => { release = resolve; });
+    const { ledger, crew, step } = setup({}, true, async (_model, req) => req.purpose === "etsy-research" ? pending : { ok: true, output: { summary: "All quiet." }, inputFlags: [], costUsd: 0 });
+    await step();
+    await step();
+    const task = listing(ledger);
+    crew.setPaused(true);
+    ledger.interruptActive();
+    release({ ok: true, output: IDEA, inputFlags: [], costUsd: 0 });
+    await settle();
+    expect(ledger.task(task.id)).toMatchObject({ state: "queued", stageIndex: 0, title: "New product idea" });
+    expect(ledger.task(task.id)?.brief).toBeUndefined();
+  });
+  it("carries reader warnings through to the exact listing approval", async () => {
+    const warning = { level: "warn" as const, code: "possible-injection", message: "Incoming text tried to direct the model" };
+    const { ledger, step } = setup({ "etsy-listing": { ok: true, output: LISTING, inputFlags: [warning], costUsd: 0 } });
+    for (let i = 0; i < 7 && listing(ledger)?.state !== "awaiting_approval"; i++) await step();
+    expect(ledger.getState().approvals.find((a) => a.taskId === listing(ledger).id)?.flags).toContainEqual(warning);
+  });
+
+  it("records the cost of a failed local reader result before stopping its stage", async () => {
+    const { ledger, step } = setup({ "etsy-research": { ok: false, error: "Bad schema", inputFlags: [], costUsd: 2 } });
+    await step(); await step();
+    expect(listing(ledger).state).toBe("awaiting_approval");
+    expect(ledger.getState().spend.etsy).toBe(2);
+    expect(ledger.getState().modelSpend.qwen).toBe(2);
+  });
+
 });

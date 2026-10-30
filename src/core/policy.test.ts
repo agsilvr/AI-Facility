@@ -42,6 +42,14 @@ describe("workflow policy", () => {
     expect(problems.join()).toContain("can't also be an approval stage");
   });
 
+  it("refuses to combine AI drafting with an action", () => {
+    const problems = workflowViolations(wingWith([
+      { ...work("draft"), needsApproval: true },
+      { ...work("send"), action: "etsy.sendReply" },
+    ]));
+    expect(problems.join()).toContain("an action stage cannot also be an AI stage");
+  });
+
   it("refuses to start with an unsafe workflow", () => {
     expect(() => assertSafeWorkflows(wingWith([{ ...work("send"), action: "etsy.publishListing" }]))).toThrow(/Unsafe workflow/);
   });

@@ -16,12 +16,12 @@ describe("map camera", () => {
     expect(stepZoom(ZOOMS[0], -1)).toBe(ZOOMS[0]);
   });
 
-  it("opens as big as the facility's height allows, at a crisp zoom, on the Command Center", () => {
+  it("opens with the entire branching facility in view", () => {
     for (const view of [desktop, phone]) {
       const cam = startCamera(layout, view);
-      expect(ZOOMS).toContain(cam.zoom);
+      expect(layout.width * cam.zoom).toBeLessThanOrEqual(view.width);
       expect(layout.height * cam.zoom).toBeLessThanOrEqual(view.height);
-      expect(cam.x).toBeCloseTo(layout.center.x);
+      expect(cam.x).toBeCloseTo(layout.width / 2);
     }
   });
 

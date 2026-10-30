@@ -1,6 +1,7 @@
 import { Ledger } from "../src/core/ledger";
 import type { Control } from "../src/core/port";
 import { assertSafeWorkflows } from "../src/core/policy";
+import { assertSafeAgents } from "../src/core/capabilities";
 import { initialState, rooms, wings } from "../src/core/seed";
 import { DemoSimulation } from "../src/sim/demo";
 import { OwnerGate } from "./owner";
@@ -11,6 +12,7 @@ const TICK_MS = 200;
 /** Whoever does the work: the demo simulation, or the real crew. */
 export interface Crew {
   tick(dt: number): void;
+  setPaused?(paused: boolean): void;
 }
 const SAVE_EVERY_MS = 2000;
 const SPEEDS = [1, 2, 4];
@@ -38,14 +40,31 @@ export class Facility {
     // Wings and rooms are configuration, not data: always take them from the
     // code, and refuse to start if any workflow breaks the safety policy.
     assertSafeWorkflows(wings);
+    const configured = initialState();
+    assertSafeAgents(wings, configured.agents);
     const saved = store.load();
-    this.ledger = new Ledger(saved ? { ...Ledger.recover(saved), wings, rooms } : initialState());
+    const recovered = saved ? Ledger.recover(saved) : undefined;
+    // Saved records hold progress, never permissions. New code actors are added;
+    // stale/unknown identities disappear and only the owner's pause is retained.
+    const agents = configured.agents.map((agent) => ({
+      ...agent,
+      status: recovered?.agents.find((a) => a.id === agent.id)?.status === "paused" ? "paused" as const : "idle" as const,
+    }));
+    // Workflow edits migrate by stage identity, preserving stopped drafts and approvals.
+    const tasks = recovered?.tasks.map((task) => {
+      const oldStage = saved!.wings.find((w) => w.id === task.wingId)?.workflows.find((w) => w.id === task.workflowId)?.stages[task.stageIndex]?.id;
+      const stages = wings.find((w) => w.id === task.wingId)?.workflows.find((w) => w.id === task.workflowId)?.stages;
+      const index = stages?.findIndex((s) => s.id === oldStage) ?? -1;
+      return index >= 0 ? { ...task, stageIndex: index } : task;
+    });
+    this.ledger = new Ledger(recovered ? { ...recovered, wings, rooms, agents, tasks: tasks! } : configured);
     this.crew = realCrew ? realCrew(this.ledger) : new DemoSimulation(this.ledger);
     this.control = { running: true, speed: 1, mode: realCrew ? "live" : "demo" };
     this.owner = new OwnerGate(store);
     // A pause is the kill switch, so it survives a restart: if the owner
     // stopped the facility, it stays stopped until they start it again.
     if (store.getSetting("paused") === "true") this.control = { ...this.control, running: false };
+    this.crew.setPaused?.(!this.control.running);
     this.ledger.subscribe(() => {
       this.dirty = true;
     });
@@ -82,6 +101,8 @@ export class Facility {
     if (typeof patch.running === "boolean") next.running = patch.running;
     if (typeof patch.speed === "number" && SPEEDS.includes(patch.speed)) next.speed = patch.speed;
     if (next.running !== this.control.running) {
+      this.crew.setPaused?.(!next.running);
+      if (!next.running) this.ledger.interruptActive();
       this.ledger.log(next.running ? "Facility resumed" : "Facility paused by owner", "info");
     }
     this.control = next;
@@ -92,5 +113,11 @@ export class Facility {
   onControl(listener: () => void) {
     this.controlListeners.add(listener);
     return () => this.controlListeners.delete(listener);
+  }
+
+  handoff(active: "claude" | "codex", expectedGeneration: number) {
+    const ok = this.ledger.handoff(active, expectedGeneration, "Owner requested a handover.");
+    if (ok) this.save();
+    return ok;
   }
 }

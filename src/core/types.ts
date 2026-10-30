@@ -44,6 +44,7 @@ export interface Stage {
   job?: Job;
   /** The most sensitive data this stage works on, which limits the models allowed to see it. */
   data?: DataClass;
+  executor?: "code";
 }
 
 /** Kinds of AI work. Each has a list of models that may do it, in order of preference. */
@@ -59,6 +60,15 @@ export type DataClass = "public" | "shop" | "customer";
 /** The models the facility's crew think with. */
 export type ModelId = "qwen" | "claude" | "deepseek" | "codex" | "typeset";
 
+export type OperatorId = "claude" | "codex";
+export interface OperatorState {
+  active: OperatorId;
+  generation: number;
+  changedAt: number;
+  reason: string;
+  automatic: boolean;
+}
+
 /** Outward actions the facility knows how to perform. */
 export type ActionId = "etsy.publishListing" | "etsy.sendReply" | "internal.fileBriefing";
 
@@ -67,6 +77,7 @@ export type RoomKind =
   | "security"
   | "vault"
   | "lab"
+  | "qc"
   | "studio"
   | "factory"
   | "comms"
@@ -87,10 +98,14 @@ export interface Room {
 
 export type AgentStatus = "idle" | "working" | "waiting" | "paused";
 
+/** Fixed code-owned permission profiles; model output can never grant one. */
+export type AgentCapability = "research" | "design" | "listing" | "reply" | "briefing" | "publish" | "send" | "quality";
+
 export interface Agent {
   id: AgentId;
   name: string;
   role: string;
+  capability: AgentCapability;
   wingId: WingId;
   /** Stage ids this agent can work on. */
   skills: string[];
@@ -137,6 +152,8 @@ export interface Task {
   model?: ModelId;
   /** Why the task can't start its next stage yet, e.g. a model's monthly cap is used up. */
   waiting?: string;
+  /** Fences a single attempt: an answer from a previous operator cannot change this task. */
+  runToken?: string;
 }
 
 export interface ListingDraft {
@@ -194,6 +211,9 @@ export interface LogEntry {
 }
 
 export interface FacilityState {
+  /** One operator owns new writing and briefing work; persisted with the shared ledger. */
+  operator?: OperatorState;
+  unavailable?: ModelId[];
   wings: Wing[];
   rooms: Room[];
   agents: Agent[];

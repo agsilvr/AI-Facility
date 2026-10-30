@@ -19,6 +19,7 @@ export class RemoteFacility implements FacilityPort {
   private source: EventSource | null = null;
   connection: Connection = "connecting";
   private version = 0;
+  commandError: string | null = null;
   /**
    * Called when the server refuses a command until the owner enters their PIN
    * (approving, sending back, resuming). `retry` sends the same command again
@@ -77,7 +78,12 @@ export class RemoteFacility implements FacilityPort {
     void this.post("/api/control", control);
   }
 
+  runResearch() { void this.post("/api/research", {}); }
+  setOperator(active: "claude" | "codex", generation: number) { void this.post("/api/operator", { active, generation }); }
+  clearError() { this.commandError = null; this.emit(); }
+
   private async post(path: string, body: unknown) {
+    this.commandError = null;
     try {
       const res = await fetch(`${this.base}${path}`, {
         method: "POST",
@@ -85,9 +91,10 @@ export class RemoteFacility implements FacilityPort {
         body: JSON.stringify(body),
       });
       if (res.status === 401 && this.onOwnerNeeded) this.onOwnerNeeded(() => void this.post(path, body));
-      else if (!res.ok) console.error(`Facility refused ${path}: ${res.status}`);
+      else if (!res.ok) { this.commandError = (await res.json().catch(() => null))?.error ?? "This action could not be completed."; this.emit(); }
     } catch (err) {
-      console.error(`Facility unreachable for ${path}`, err);
+      this.commandError = "The facility is offline. Reconnect before trying again.";
+      this.emit();
     }
   }
 

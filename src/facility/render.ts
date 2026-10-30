@@ -4,7 +4,7 @@ import { contains, HALL_H, MARGIN, TILE, type FacilityLayout, type Rect } from "
 import type { Walker } from "./movement";
 import { crewSprite, frame, hash, P, rect, SPRITE_H, SPRITE_W, tag, text, textWidth } from "./pixels";
 import { animateRoom, paintRoom } from "./rooms";
-import { glow, hazard } from "./rooms/kit";
+import { glow, hazard, plant } from "./rooms/kit";
 import { pendingApprovals, roomNeedsAttention, tasksInRoom, type Selection } from "./status";
 
 export type { Selection };
@@ -71,7 +71,7 @@ function earthTile(): HTMLCanvasElement {
     }
   }
   // Speckle, so the dirt has grain.
-  for (let i = 0; i < (EARTH_TILE * EARTH_TILE) / 18; i++) {
+  for (let i = 0; i < (EARTH_TILE * EARTH_TILE) / 60; i++) {
     const r = hash(i * 3.1);
     rect(ctx, Math.floor(hash(i) * EARTH_TILE), Math.floor(hash(i + 0.5) * EARTH_TILE), 1, 1, r > 0.66 ? P.dirt3 : r > 0.33 ? P.dirt0 : P.clay);
   }
@@ -141,6 +141,19 @@ function districtBlocks(layout: FacilityLayout): (Rect & { wingId: string })[] {
  * pipes run up through the dirt towards the surface.
  */
 function paintHull(ctx: CanvasRenderingContext2D, layout: FacilityLayout) {
+  if (layout.corridors) {
+    for (const c of layout.corridors) { rect(ctx, c.x - 4, c.y - 4, c.w + 8, c.h + 8, P.ink); rect(ctx, c.x - 2, c.y - 2, c.w + 4, c.h + 4, "#827253"); }
+    for (const r of layout.rooms.values()) {
+      rect(ctx, r.rect.x - 5, r.rect.y - 5, r.rect.w + 10, r.rect.h + 10, "#403c2b");
+      rect(ctx, r.rect.x - 3, r.rect.y - 3, r.rect.w + 6, r.rect.h + 6, "#9b855d");
+      // Ivy, warm timber beams and potted plants give the station a lived-in edge.
+      for (let x = r.rect.x + 12; x < r.rect.x + r.rect.w - 8; x += 34) {
+        rect(ctx, x, r.rect.y - 5, 12, 3, "#738653"); rect(ctx, x + 4, r.rect.y - 8, 5, 4, "#84965f");
+      }
+      if (r.kind !== "sealed") plant(ctx, r.rect.x - 14, r.rect.y + r.rect.h - 20);
+    }
+    return;
+  }
   const h = layout.hall;
   const shells = [...districtBlocks(layout), { wingId: "", x: h.x - 6, y: h.y - 6, w: h.w + 12, h: h.h + 12 }];
   for (const b of shells) rect(ctx, b.x - 2, b.y - 2, b.w + 4, b.h + 4, P.ink);
@@ -164,6 +177,29 @@ function paintHull(ctx: CanvasRenderingContext2D, layout: FacilityLayout) {
 
 /** The main hall: metal floor plates, wall lamps, each district's name and signs pointing to Command. */
 function paintHall(ctx: CanvasRenderingContext2D, layout: FacilityLayout, state: FacilityState) {
+  if (layout.corridors) {
+    for (const c of layout.corridors) {
+      ctx.save(); ctx.beginPath(); ctx.rect(c.x, c.y, c.w, c.h); ctx.clip();
+      rect(ctx, c.x, c.y, c.w, c.h, "#b1a37d");
+      for (let y = c.y; y < c.y + c.h; y += 9) {
+        rect(ctx, c.x, y, c.w, 1, "#897e5d");
+        for (let x = c.x + ((y / 9) % 2) * 14; x < c.x + c.w; x += 28) rect(ctx, x, y, 1, 9, "#9b8e69");
+      }
+      ctx.restore();
+    }
+    const route = [["etsy-lab", "01 RESEARCH"], ["etsy-studio", "02 DESIGN"], ["etsy-qc", "03 CHECK"], ["etsy-factory", "04 PUBLISH"], ["dock", "05 OUTBOX"]];
+    for (const [id, label] of route) {
+      const r = layout.rooms.get(id); if (!r) continue;
+      const cx = r.door.outside.x;
+      tag(ctx, label, cx, layout.laneY - 4, "#f3ebcf", "#687754");
+      rect(ctx, cx - 17, layout.hall.y - 3, 7, 3, "#e8d6a3");
+      glow(ctx, cx - 14, layout.hall.y + 4, 19, 12, "#ffe0a3", .04);
+    }
+    tag(ctx, "BRIDGE", 928, 281, "#ece5c5", "#667a51");
+    tag(ctx, "TREASURY", 516, 288, "#eee2b3", "#81764f");
+    tag(ctx, "SECURITY", 1320, 288, "#e2e8d0", "#667a59");
+    return;
+  }
   const h = layout.hall;
   for (let x = h.x; x < h.x + h.w; x += TILE) {
     for (let y = h.y; y < h.y + h.h; y += TILE) {
@@ -240,7 +276,7 @@ export function drawFacility(ctx: CanvasRenderingContext2D, scene: Scene, backgr
 
   // Lane lights chasing along the hall: ambient, to show the station is powered.
   const chase = Math.floor(time * 40) % 48;
-  for (let x = layout.hall.x + chase; x < layout.hall.x + layout.hall.w; x += 48) rect(ctx, x, layout.laneY + 6, 6, 1, "rgba(120,200,255,0.5)");
+  for (let x = layout.hall.x + chase; !layout.corridors && x < layout.hall.x + layout.hall.w; x += 48) rect(ctx, x, layout.laneY + 6, 6, 1, "rgba(120,200,255,0.5)");
 
   const completed = completedCount(state);
   const pending = pendingApprovals(state);
@@ -264,7 +300,7 @@ export function drawFacility(ctx: CanvasRenderingContext2D, scene: Scene, backgr
     if (!rl) continue;
     const r = rl.rect;
     if (roomNeedsAttention(state, room)) {
-      const on = Math.sin(time * 6) > 0;
+      const on = true;
       frame(ctx, r.x - 1, r.y - 1, r.w + 2, r.h + 2, on ? P.red : P.darkRed);
       frame(ctx, r.x - 2, r.y - 2, r.w + 4, r.h + 4, on ? P.darkRed : P.ink);
       if (room.kind !== "command") bubble(ctx, r.x + r.w - 14, r.y - 10 + Math.round(Math.sin(time * 4) * 1.5));

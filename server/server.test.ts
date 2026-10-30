@@ -31,6 +31,27 @@ describe("Store", () => {
     const second = new Facility(store);
     expect(second.ledger.task(task.id)?.state).toBe("queued");
   });
+
+  it("reloads identities and permissions from code, retaining only saved pauses", () => {
+    const store = new Store(":memory:");
+    const first = new Facility(store);
+    const scout = first.ledger.agent("scout")!;
+    scout.skills.push("publish");
+    scout.capability = "publish";
+    scout.wingId = "core";
+    first.ledger.setAgentPaused("scout", true);
+    const state = first.ledger.getState();
+    state.agents = state.agents.filter((a) => a.id !== "relay" && a.id !== "post");
+    state.agents.push({ ...scout, id: "injected-admin" });
+    first.save();
+
+    const second = new Facility(store);
+    expect(second.ledger.agent("scout")).toMatchObject({ capability: "research", wingId: "etsy", skills: ["research", "research-test"], status: "paused" });
+    expect(second.ledger.agent("injected-admin")).toBeUndefined();
+    expect(second.ledger.agent("relay")?.capability).toBe("publish");
+    expect(second.ledger.agent("post")?.capability).toBe("send");
+    store.close();
+  });
 });
 
 describe("Audit trail", () => {

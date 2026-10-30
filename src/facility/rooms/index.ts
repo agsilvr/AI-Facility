@@ -11,6 +11,7 @@ import { sealed } from "./sealed";
 import { security } from "./security";
 import { studio } from "./studio";
 import { vault } from "./vault";
+import { qc } from "./qc";
 
 export type { RoomFrame };
 
@@ -19,7 +20,7 @@ export type { RoomFrame };
 // glance. paintRoom draws the parts that never change once, into the map's
 // background; animateRoom draws what moves or shows the ledger every frame.
 
-const ART: Record<RoomKind, RoomArt> = { command, security, vault, lab, studio, factory, comms, dock, sealed };
+const ART: Record<RoomKind, RoomArt> = { command, security, vault, lab, qc, studio, factory, comms, dock, sealed };
 
 /** For a kind of room this version doesn't know, such as one from older saved data. */
 const PLAIN: RoomArt = {
@@ -44,14 +45,14 @@ export function paintRoom(ctx: CanvasRenderingContext2D, room: Room, rl: RoomLay
 
   // The outer walls, seen from above: a thick top edge with a lit rim.
   rect(ctx, r.x - 1, r.y - 1, r.w + 2, r.h + 2, P.ink);
-  rect(ctx, r.x, r.y, r.w, r.h, "#4d5475");
-  rect(ctx, r.x, r.y, r.w, 1, "#7d86ad");
-  rect(ctx, r.x, r.y + r.h - 1, r.w, 1, "#2a2f45");
+  rect(ctx, r.x, r.y, r.w, r.h, "#74664c");
+  rect(ctx, r.x, r.y, r.w, 1, "#c2ad7b");
+  rect(ctx, r.x, r.y + r.h - 1, r.w, 1, "#534c37");
 
   art.floor(ctx, s);
   art.wall(ctx, s);
   // The ceiling edge above the wall, a skirting board below it, and a strip of the wing's colour.
-  rect(ctx, wall.x, wall.y, wall.w, 2, "#5d6588");
+  rect(ctx, wall.x, wall.y, wall.w, 2, "#c4ae81");
   rect(ctx, wall.x, wall.y + 2, wall.w, 1, room.kind === "sealed" ? P.stone0 : accent);
   rect(ctx, wall.x, wall.y + wall.h - 2, wall.w, 2, "rgba(0,0,0,0.35)");
   // The wall casts a shadow onto the floor.

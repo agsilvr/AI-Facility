@@ -1,4 +1,5 @@
 import { MODELS, route, type Load } from "./models";
+import { canWorkStage } from "./capabilities";
 import { checkDraft, hasBlockingFlag, serializeDraft } from "./safety";
 import type {
   Agent,
@@ -10,6 +11,7 @@ import type {
   Flag,
   LogLevel,
   ModelId,
+  OperatorId,
   Stage,
   Task,
   TaskId,
@@ -73,7 +75,7 @@ export class Ledger {
       ...saved,
       tasks: saved.tasks.map((t) => {
         const withFlags = { ...t, flags: t.flags ?? [] };
-        return t.state === "active" ? { ...withFlags, state: "queued", agentId: null, progress: 0, model: undefined } : withFlags;
+        return t.state === "active" ? { ...withFlags, state: "queued", agentId: null, progress: 0, model: undefined, runToken: undefined } : withFlags;
       }),
       approvals: saved.approvals.map((a) => ({ ...a, flags: a.flags ?? [] })),
       modelSpend: saved.modelSpend ?? {},
@@ -161,16 +163,22 @@ export class Ledger {
   assign(taskId: TaskId, agentId: AgentId) {
     const task = this.task(taskId);
     const agent = this.agent(agentId);
-    if (!task || !agent || task.state !== "queued" || agent.taskId) return;
+    if (!task || !agent || task.state !== "queued" || agent.status !== "idle" || agent.taskId || this.overBudget(task.wingId)) return;
     const stage = this.stagesOf(task)[task.stageIndex];
-    if (!stage) return;
+    if (!stage || !canWorkStage(agent, task.wingId, stage)) return;
     if (stage.action && !this.mayAct(task)) {
       this.sendBackUnapproved(task, stage.label);
       return;
     }
-    // AI stages get their model from the router. Without a data class, assume
-    // the most sensitive, so a stage someone forgot to label stays private.
-    const picked = stage.job ? route(stage.job, stage.data ?? "customer", this.load()) : null;
+    // Only a declared job/data class matching the agent's capability reaches
+    // the router; missing labels were denied above.
+    const load = this.load();
+    // A single elected operator handles writing. Artwork still uses the local
+    // type designer until a real image handoff is connected.
+    const unavailable = [...(load.unavailable ?? [])];
+    if (stage.job === "write" || stage.job === "brief") unavailable.push(this.operator().active === "claude" ? "codex" : "claude");
+    if (stage.job === "design") unavailable.push("codex");
+    const picked = stage.job ? route(stage.job, stage.data ?? "customer", { ...load, unavailable }) : null;
     if (picked && !picked.ok) {
       if (task.waiting !== picked.reason) {
         this.patchTask(taskId, { waiting: picked.reason });
@@ -179,7 +187,7 @@ export class Ledger {
       return;
     }
     const model = picked?.model;
-    this.patchTask(taskId, { state: "active", agentId, progress: 0, model, waiting: undefined });
+    this.patchTask(taskId, { state: "active", agentId, progress: 0, model, waiting: undefined, runToken: this.nextId("run") });
     this.patchAgent(agentId, { status: "working", taskId, roomId: stage.roomId });
     const using = model ? ` (${MODELS[model].name})` : "";
     this.log(`${agent.name} started "${stage.label}" on ${task.title}${using}`, "info", task.wingId);
@@ -196,7 +204,7 @@ export class Ledger {
   /** Record work done on an active task. Returns true when the stage is finished. */
   work(taskId: TaskId, amount: number, cost: number): boolean {
     const task = this.task(taskId);
-    if (!task || task.state !== "active") return false;
+    if (!task || !this.mayWork(task)) return false;
     this.rollMonth();
     const progress = Math.min(1, task.progress + amount);
     this.patchTask(taskId, { progress, cost: task.cost + cost });
@@ -209,6 +217,16 @@ export class Ledger {
       modelSpend,
     });
     return progress >= 1;
+  }
+
+  /** Recheck authority at execution and completion, including the current run's ownership. */
+  mayWork(task: Task): boolean {
+    const current = this.task(task.id);
+    if (!current || current.state !== "active" || !current.runToken || current.runToken !== task.runToken ||
+      current.stageIndex !== task.stageIndex || current.agentId !== task.agentId || current.model !== task.model) return false;
+    const agent = current.agentId ? this.agent(current.agentId) : undefined;
+    const stage = this.stagesOf(current)[current.stageIndex];
+    return !!agent && !!stage && agent.status === "working" && agent.taskId === current.id && canWorkStage(agent, current.wingId, stage);
   }
 
   /**
@@ -234,7 +252,7 @@ export class Ledger {
    */
   finishStage(taskId: TaskId, note: string, output: { draft?: Draft; inputFlags?: Flag[] } = {}) {
     const task = this.task(taskId);
-    if (!task) return;
+    if (!task || !this.mayWork(task)) return;
     const stage = this.stagesOf(task)[task.stageIndex];
     if (!stage) return;
     if (stage.action) {
@@ -249,7 +267,7 @@ export class Ledger {
     }
     const notes = [...task.notes, `${stage.label}: ${note}`];
     const draft = output.draft ?? task.draft;
-    const flags = [...(output.inputFlags ?? []), ...(draft ? checkDraft(draft) : [])];
+    const flags = [...task.flags.filter((f) => f.level === "warn"), ...(output.inputFlags ?? []), ...(draft ? checkDraft(draft) : [])];
     // An approval with nothing to look at would approve an action blind.
     if (stage.needsApproval && !draft) {
       flags.push({ level: "block", code: "no-draft", message: "There is nothing to review: this step produced no draft." });
@@ -324,7 +342,7 @@ export class Ledger {
       // Rejected work goes back one stage to be redone.
       this.patchTask(task.id, {
         state: "queued",
-        stageIndex: Math.max(0, task.stageIndex - 1),
+        stageIndex: task.workflowId === "listing" ? Math.max(0, this.stagesOf(task).findIndex((s) => s.id === "design")) : Math.max(0, task.stageIndex - 1),
         progress: 0,
         approvedContent: undefined,
         approvedAt: undefined,
@@ -370,6 +388,47 @@ export class Ledger {
   /** Models the router must skip, e.g. ones not connected on this Mac yet. */
   setUnavailable(models: ModelId[]) {
     this.unavailable = models;
+    if (JSON.stringify(this.state.unavailable) !== JSON.stringify(models)) this.commit({ ...this.state, unavailable: models });
+  }
+
+  operator() {
+    return this.state.operator ?? { active: "claude" as const, generation: 0, changedAt: 0, reason: "Primary operator", automatic: true };
+  }
+
+  /** Compare-and-swap handoff. Existing answers lose their claim before new work is dispatched. */
+  handoff(active: OperatorId, expectedGeneration: number, reason: string): boolean {
+    const current = this.operator();
+    if (expectedGeneration !== current.generation) return false;
+    if (active === current.active) return true;
+    for (const task of this.state.tasks) {
+      if (task.state !== "active" || (task.model !== "claude" && task.model !== "codex")) continue;
+      this.releaseAgent(task.agentId);
+      this.patchTask(task.id, { state: "queued", agentId: null, progress: 0, model: undefined, runToken: undefined });
+    }
+    this.commit({ ...this.state, operator: { ...current, active, generation: current.generation + 1, changedAt: this.now(), reason } });
+    this.log(`${active === "codex" ? "Codex" : "Claude"} took command. ${reason} Shared jobs and approvals retained.`, "info");
+    return true;
+  }
+
+  interruptActive() {
+    for (const task of this.state.tasks) {
+      if (task.state !== "active") continue;
+      this.releaseAgent(task.agentId);
+      this.patchTask(task.id, { state: "queued", agentId: null, progress: 0, model: undefined, runToken: undefined });
+    }
+  }
+
+  /** Usage is recorded even when an answer fails or arrives after a handoff. */
+  recordUsage(taskId: string, model: ModelId | undefined, cost: number) {
+    if (!Number.isFinite(cost) || cost <= 0) return;
+    const task = this.task(taskId);
+    if (!task) return;
+    this.rollMonth();
+    this.patchTask(taskId, { cost: task.cost + cost });
+    this.commit({ ...this.state,
+      spend: { ...this.state.spend, [task.wingId]: (this.state.spend[task.wingId] ?? 0) + cost },
+      modelSpend: model ? { ...this.state.modelSpend, [model]: (this.state.modelSpend[model] ?? 0) + cost } : this.state.modelSpend,
+    });
   }
 
   setAgentPaused(agentId: AgentId, paused: boolean) {
@@ -377,7 +436,7 @@ export class Ledger {
     if (!agent) return;
     if (paused && agent.taskId) {
       // Hand the task back to the queue so another agent can pick it up.
-      this.patchTask(agent.taskId, { state: "queued", agentId: null });
+      this.patchTask(agent.taskId, { state: "queued", agentId: null, runToken: undefined, model: undefined });
     }
     this.patchAgent(agentId, { status: paused ? "paused" : "idle", taskId: null });
     this.log(`${agent.name} ${paused ? "paused" : "resumed"}`, "info", agent.wingId);

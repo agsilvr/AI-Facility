@@ -31,13 +31,12 @@ describe("RemoteFacility commands", () => {
 
   it("doesn't ask for the PIN for other refusals", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(answer(409)));
-    vi.spyOn(console, "error").mockImplementation(() => {});
     const facility = new RemoteFacility();
     const asked = vi.fn();
     facility.onOwnerNeeded = asked;
 
     facility.setAgentPaused("agent-1", false);
-    await vi.waitFor(() => expect(console.error).toHaveBeenCalled());
+    await vi.waitFor(() => expect(facility.commandError).toBe("This action could not be completed."));
     expect(asked).not.toHaveBeenCalled();
   });
 });

@@ -91,6 +91,7 @@ describe("validate", () => {
     [{ message: 5 }, "must be text"],
     [{ message: "x".repeat(2001) }, "too long"],
     [{ message: "hi", sendTo: "a@b.com" }, "not allowed"],
+    [{ message: "hi", capability: "publish", skills: ["publish"] }, "not allowed"],
   ])("rejects %j", (value, problem) => {
     expect(validate(value, SCHEMA)).toContain(problem);
   });
