@@ -176,7 +176,7 @@ async function readWithClaude(req: ReaderRequest, inputFlags: Flag[], spawner: S
       input: fenceUntrusted(req.source, req.untrusted),
       timeoutMs: req.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     });
-    if (code !== 0) return fail(`Claude Code exited with ${code}: ${stderr.slice(0, 500)}`, inputFlags);
+    if (code !== 0) return fail(`Claude Code exited with ${code}: ${(stderr || stdout).trim().slice(0, 300)}`, inputFlags);
     let parsed: { is_error?: boolean; structured_output?: unknown; result?: unknown; total_cost_usd?: number };
     try {
       parsed = JSON.parse(stdout);
@@ -232,6 +232,18 @@ async function readWithQwen(req: ReaderRequest, inputFlags: Flag[], ollama: Olla
   // A local model costs nothing per call.
   if (problem) return fail(`Output didn't match the expected format: ${problem}`, inputFlags);
   return { ok: true, output, inputFlags, costUsd: 0 };
+}
+
+/** Is Ollama answering on this Mac with Qwen downloaded? Used to keep research waiting, not failing, until it is. */
+export async function qwenReady(get: (url: string) => Promise<Response> = (url) => fetch(url, { signal: AbortSignal.timeout(5000) })) {
+  try {
+    const res = await get(`${OLLAMA_URL}/api/tags`);
+    if (!res.ok) return false;
+    const body = (await res.json()) as { models?: { name?: string }[] };
+    return (body.models ?? []).some((m) => m.name === QWEN_TAG);
+  } catch {
+    return false;
+  }
 }
 
 const defaultOllama: OllamaClient = async (path, body, timeoutMs) => {

@@ -84,6 +84,23 @@ button.primary {
   letter-spacing: 0.06em;
 }
 
+.live-badge {
+  font-size: 10px;
+  color: var(--ok);
+  letter-spacing: 0.06em;
+}
+
+/* The design on a listing card, at a size that shows the lettering clearly. */
+.draft-design {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 1;
+  margin: 4px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
 .stats {
   display: flex;
   gap: 18px;

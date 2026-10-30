@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { type AuditEntry, fenceUntrusted, OLLAMA_URL, type OllamaClient, QWEN_TAG, qwenRequest, readerArgs, readerEnv, runReader, type Spawner, validate } from "./reader";
+import { type AuditEntry, fenceUntrusted, OLLAMA_URL, type OllamaClient, QWEN_TAG, qwenReady, qwenRequest, readerArgs, readerEnv, runReader, type Spawner, validate } from "./reader";
 
 const SCHEMA = {
   type: "object",
@@ -229,3 +229,15 @@ describe("Qwen reader", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe("qwenReady", () => {
+  const tags = (names: string[]) => async () => new Response(JSON.stringify({ models: names.map((name) => ({ name })) }));
+
+  it("is ready only when Ollama answers and Qwen is downloaded", async () => {
+    expect(await qwenReady(tags([QWEN_TAG, "llama3:8b"]))).toBe(true);
+    expect(await qwenReady(tags(["llama3:8b"]))).toBe(false);
+    expect(await qwenReady(async () => new Response("", { status: 500 }))).toBe(false);
+    expect(await qwenReady(async () => Promise.reject(new Error("ECONNREFUSED")))).toBe(false);
+  });
+});
+

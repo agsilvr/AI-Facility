@@ -49,6 +49,8 @@ export const ROUTES: Record<Job, ModelId[]> = {
 export interface Load {
   busy: Partial<Record<ModelId, number>>;
   spent: Partial<Record<ModelId, number>>;
+  /** Models that can't be used right now, e.g. not connected yet. */
+  unavailable?: ModelId[];
 }
 
 export type Route = { ok: true; model: ModelId } | { ok: false; reason: string };
@@ -70,8 +72,9 @@ export function route(job: Job, data: DataClass, load: Load, routes = ROUTES): R
     const m = MODELS[id];
     if (m.capacity !== undefined && (load.busy[id] ?? 0) >= m.capacity) continue;
     if (m.monthlyCapUsd !== undefined && (load.spent[id] ?? 0) >= m.monthlyCapUsd) continue;
+    if (load.unavailable?.includes(id)) continue;
     return { ok: true, model: id };
   }
   const names = allowed.map((id) => MODELS[id].name).join(" and ");
-  return { ok: false, reason: `Waiting for ${names}: busy or this month's cap is used up` };
+  return { ok: false, reason: `Waiting for ${names}: busy, not connected, or this month's cap is used up` };
 }

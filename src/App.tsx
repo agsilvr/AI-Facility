@@ -47,6 +47,7 @@ export function App() {
         state={state}
         running={control.running}
         speed={control.speed}
+        mode={control.mode}
         onToggleRunning={() => facility.setControl({ running: !control.running })}
         onSpeed={(speed) => facility.setControl({ speed })}
         owner={owner}
@@ -57,7 +58,14 @@ export function App() {
           <FacilityView ledger={facility} selection={selection} onSelect={setSelection} />
           {selection && <Inspector state={state} selection={selection} onClose={() => setSelection(null)} />}
         </section>
-        <Sidebar ledger={facility} state={state} now={now} pinSet={owner.status?.pinSet ?? true} onSelect={setSelection} />
+        <Sidebar
+          ledger={facility}
+          state={state}
+          now={now}
+          live={control.mode === "live"}
+          pinSet={owner.status?.pinSet ?? true}
+          onSelect={setSelection}
+        />
       </main>
       <OwnerDialog owner={owner} />
     </div>

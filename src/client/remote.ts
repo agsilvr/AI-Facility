@@ -58,7 +58,7 @@ export class RemoteFacility implements FacilityPort {
   /** Changes whenever anything the screens show changes. */
   getVersion = () => this.version;
 
-  getControl = (): Control => this.snapshot?.control ?? { running: false, speed: 1 };
+  getControl = (): Control => this.snapshot?.control ?? { running: false, speed: 1, mode: "demo" };
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);

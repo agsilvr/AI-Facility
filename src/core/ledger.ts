@@ -9,6 +9,7 @@ import type {
   FacilityState,
   Flag,
   LogLevel,
+  ModelId,
   Stage,
   Task,
   TaskId,
@@ -51,6 +52,8 @@ export class Ledger {
   private state: FacilityState;
   private listeners = new Set<Listener>();
   private seq = 0;
+  /** Models the router skips; set by whoever runs the crew, not saved. */
+  private unavailable: ModelId[] = [];
   private now: () => number;
 
   constructor(initial: FacilityState, now: () => number = Date.now) {
@@ -187,7 +190,7 @@ export class Ledger {
     this.rollMonth();
     const busy: Load["busy"] = {};
     for (const t of this.state.tasks) if (t.state === "active" && t.model) busy[t.model] = (busy[t.model] ?? 0) + 1;
-    return { busy, spent: this.state.modelSpend };
+    return { busy, spent: this.state.modelSpend, unavailable: this.unavailable };
   }
 
   /** Record work done on an active task. Returns true when the stage is finished. */
@@ -307,6 +310,12 @@ export class Ledger {
       ),
     });
     if (!task) return true;
+    if (approval.kind === "failure") {
+      // A failed stage isn't rework: the same stage simply runs again.
+      this.patchTask(task.id, { state: "queued", progress: 0 });
+      this.log(`Trying again: ${task.title}`, "info", task.wingId);
+      return true;
+    }
     if (approve) {
       this.patchTask(task.id, { approvedContent: approval.content ?? "null", approvedAt: this.now() });
       this.log(`Approved: ${task.title}`, "success", task.wingId);
@@ -323,6 +332,44 @@ export class Ledger {
       this.log(`Sent back for rework: ${task.title}`, "warning", task.wingId);
     }
     return true;
+  }
+
+  /**
+   * Fail closed: a stage that went wrong (a model unreachable, an answer in
+   * the wrong shape) stops, frees its agent and waits in Needs you. It can't
+   * be approved, only tried again.
+   */
+  failStage(taskId: TaskId, reason: string) {
+    const task = this.task(taskId);
+    if (!task || task.state !== "active") return;
+    const stage = this.stagesOf(task)[task.stageIndex];
+    if (!stage) return;
+    const flags: Flag[] = [{ level: "block", code: "stage-failed", message: reason }];
+    const approval: Approval = {
+      id: this.nextId("appr"),
+      taskId,
+      wingId: task.wingId,
+      summary: `${stage.label} stopped`,
+      flags,
+      status: "pending",
+      kind: "failure",
+      createdAt: this.now(),
+    };
+    this.releaseAgent(task.agentId);
+    this.patchTask(taskId, { state: "awaiting_approval", agentId: null, progress: 0, model: undefined });
+    this.commit({ ...this.state, approvals: [approval, ...this.state.approvals] });
+    this.log(`${stage.label} stopped on ${task.title}: ${reason}`, "warning", task.wingId);
+  }
+
+  /** Record what later stages work from, and name the task after it. */
+  setBrief(taskId: TaskId, brief: string, title?: string) {
+    if (!this.task(taskId)) return;
+    this.patchTask(taskId, { brief, ...(title ? { title } : {}) });
+  }
+
+  /** Models the router must skip, e.g. ones not connected on this Mac yet. */
+  setUnavailable(models: ModelId[]) {
+    this.unavailable = models;
   }
 
   setAgentPaused(agentId: AgentId, paused: boolean) {

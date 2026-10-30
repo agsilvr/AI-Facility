@@ -7,6 +7,11 @@ import { OwnerGate } from "./owner";
 import type { Store } from "./store";
 
 const TICK_MS = 200;
+
+/** Whoever does the work: the demo simulation, or the real crew. */
+export interface Crew {
+  tick(dt: number): void;
+}
 const SAVE_EVERY_MS = 2000;
 const SPEEDS = [1, 2, 4];
 
@@ -18,20 +23,25 @@ export class Facility {
   readonly ledger: Ledger;
   /** Proof that a decision comes from the owner. */
   readonly owner: OwnerGate;
-  private sim: DemoSimulation;
-  private control: Control = { running: true, speed: 1 };
+  private crew: Crew;
+  private control: Control;
   private timer: NodeJS.Timeout | null = null;
   private dirty = false;
   private lastSave = 0;
   private controlListeners = new Set<() => void>();
 
-  constructor(private store: Store) {
+  /** Without a real crew, the facility runs the labelled demo. */
+  constructor(
+    private store: Store,
+    realCrew?: (ledger: Ledger) => Crew,
+  ) {
     // Wings and rooms are configuration, not data: always take them from the
     // code, and refuse to start if any workflow breaks the safety policy.
     assertSafeWorkflows(wings);
     const saved = store.load();
     this.ledger = new Ledger(saved ? { ...Ledger.recover(saved), wings, rooms } : initialState());
-    this.sim = new DemoSimulation(this.ledger);
+    this.crew = realCrew ? realCrew(this.ledger) : new DemoSimulation(this.ledger);
+    this.control = { running: true, speed: 1, mode: realCrew ? "live" : "demo" };
     this.owner = new OwnerGate(store);
     // A pause is the kill switch, so it survives a restart: if the owner
     // stopped the facility, it stays stopped until they start it again.
@@ -53,7 +63,8 @@ export class Facility {
   }
 
   tick(dt = TICK_MS / 1000) {
-    if (this.control.running) this.sim.tick(dt * this.control.speed);
+    // Speed only makes sense for the demo; real models take the time they take.
+    if (this.control.running) this.crew.tick(this.control.mode === "demo" ? dt * this.control.speed : dt);
     if (this.dirty && Date.now() - this.lastSave >= SAVE_EVERY_MS) this.save();
   }
 

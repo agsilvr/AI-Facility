@@ -43,7 +43,7 @@ describe("model router", () => {
 
   it("waits, and says why, when every allowed model is full or out of budget", () => {
     const r = route("research", "public", { busy: { qwen: 1 }, spent: { deepseek: 5 } });
-    expect(r).toEqual({ ok: false, reason: "Waiting for Qwen 3.5 9B and DeepSeek: busy or this month's cap is used up" });
+    expect(r).toEqual({ ok: false, reason: "Waiting for Qwen 3.5 9B and DeepSeek: busy, not connected, or this month's cap is used up" });
   });
 
   it("has Claude write every listing and reply", () => {

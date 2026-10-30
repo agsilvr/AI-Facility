@@ -14,10 +14,12 @@ interface Props {
   now: number;
   /** False until the owner has chosen an approval PIN; nothing can be approved before then. */
   pinSet: boolean;
+  /** Real models at work, rather than the demo. */
+  live: boolean;
   onSelect: (s: Selection) => void;
 }
 
-export function Sidebar({ ledger, state, now, pinSet, onSelect }: Props) {
+export function Sidebar({ ledger, state, now, pinSet, live, onSelect }: Props) {
   const [tab, setTab] = useState<Tab>("attention");
   const pending = state.approvals.filter((a) => a.status === "pending");
 
@@ -34,7 +36,7 @@ export function Sidebar({ ledger, state, now, pinSet, onSelect }: Props) {
       <div className="tab-body">
         {tab === "attention" && <Attention ledger={ledger} state={state} now={now} pinSet={pinSet} />}
         {tab === "flow" && <Flow state={state} />}
-        {tab === "crew" && <Crew ledger={ledger} state={state} onSelect={onSelect} />}
+        {tab === "crew" && <Crew ledger={ledger} state={state} live={live} onSelect={onSelect} />}
         {tab === "log" && <Log state={state} now={now} />}
       </div>
     </aside>
@@ -85,6 +87,7 @@ function Attention({ ledger, state, now, pinSet }: { ledger: FacilityPort; state
         const wing = state.wings.find((w) => w.id === a.wingId);
         // The ledger refuses approvals older than this, so the button says so before you press it.
         const stale = now - a.createdAt > APPROVAL_TTL_MS;
+        const failed = a.kind === "failure";
         const why = blocked(a.flags)
           ? "This can't go out as it is. Send it back to be redone."
           : stale
@@ -96,7 +99,9 @@ function Attention({ ledger, state, now, pinSet }: { ledger: FacilityPort; state
               <strong>{task?.title}</strong>
               <span className="muted">{timeAgo(a.createdAt, now)}</span>
             </div>
-            <span className="muted">{wing?.name} · {task && stageLabel(state, task)}</span>
+            <span className="muted">
+              {wing?.name} · {failed ? a.summary : task && stageLabel(state, task)}
+            </span>
             <ul className="notes">
               {task?.notes.map((n, i) => <li key={i}>{n}</li>)}
             </ul>
@@ -106,22 +111,26 @@ function Attention({ ledger, state, now, pinSet }: { ledger: FacilityPort; state
               <ul className="flags">
                 {a.flags.map((f) => (
                   <li key={`${f.level}-${f.code}`} className={`flag-${f.level}`}>
-                    {f.level === "block" ? "Blocked: " : "Check: "}
+                    {failed ? "Stopped: " : f.level === "block" ? "Blocked: " : "Check: "}
                     {f.message}
                   </li>
                 ))}
               </ul>
             )}
             <div className="card-actions">
-              <button
-                className="primary"
-                disabled={!!why}
-                title={why}
-                onClick={() => ledger.decide(a.id, true)}
-              >
-                Approve
-              </button>
-              <button onClick={() => ledger.decide(a.id, false)}>Send back</button>
+              {failed ? (
+                // A stage that stopped has nothing to approve: it can only run again.
+                <button className="primary" onClick={() => ledger.decide(a.id, false)}>
+                  Try again
+                </button>
+              ) : (
+                <>
+                  <button className="primary" disabled={!!why} title={why} onClick={() => ledger.decide(a.id, true)}>
+                    Approve
+                  </button>
+                  <button onClick={() => ledger.decide(a.id, false)}>Send back</button>
+                </>
+              )}
             </div>
           </li>
         );
@@ -146,6 +155,9 @@ function DraftPreview({ content }: { content: string }) {
     return (
       <div className="draft">
         <div className="draft-label">Listing that will be published</div>
+        {draft.design && (
+          <img className="draft-design" src={`/api/designs/${encodeURIComponent(draft.design)}`} alt="The design this listing uses" />
+        )}
         <strong>{draft.title}</strong> <span className="muted">${draft.priceUsd.toFixed(2)}</span>
         <p>{draft.description}</p>
         <div className="muted">Tags: {draft.tags.join(", ")}</div>
@@ -213,7 +225,17 @@ function Flow({ state }: { state: FacilityState }) {
   );
 }
 
-function Crew({ ledger, state, onSelect }: { ledger: FacilityPort; state: FacilityState; onSelect: (s: Selection) => void }) {
+function Crew({
+  ledger,
+  state,
+  live,
+  onSelect,
+}: {
+  ledger: FacilityPort;
+  state: FacilityState;
+  live: boolean;
+  onSelect: (s: Selection) => void;
+}) {
   return (
     <>
       <ul className="cards">
@@ -240,7 +262,7 @@ function Crew({ ledger, state, onSelect }: { ledger: FacilityPort; state: Facili
           );
         })}
       </ul>
-      <Models state={state} />
+      <Models state={state} live={live} />
     </>
   );
 }
@@ -248,12 +270,12 @@ function Crew({ ledger, state, onSelect }: { ledger: FacilityPort; state: Facili
 const SEES: Record<DataClass, string> = { public: "public info", shop: "your shop's plans", customer: "customer messages" };
 
 /** The models behind the crew: where each one runs, what it may see, and what it has spent this month. */
-function Models({ state }: { state: FacilityState }) {
+function Models({ state, live }: { state: FacilityState; live: boolean }) {
   return (
     <section className="models">
       <h3>Models</h3>
       {/* Matches the demo label in the top bar: until real models are connected, the crew is simulated. */}
-      <p className="muted">Demo mode: the crew is simulated, so no model is really called yet.</p>
+      {!live && <p className="muted">Demo mode: the crew is simulated, so no model is really called yet.</p>}
       <ul>
         {(Object.keys(MODELS) as ModelId[]).map((id) => {
           const m = MODELS[id];
