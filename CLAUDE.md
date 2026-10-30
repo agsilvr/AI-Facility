@@ -75,9 +75,10 @@ Read them before every change and follow them without exception.
     The facility touches only its own folder (`~/ai-facility`) plus one file,
     `~/Library/LaunchAgents/com.aifacility.server.plist`. Never use `sudo`, and never touch the
     Keychain, browsers, other folders, other users' files or the owner's Apple Account.
-14. **The lockdown settings stay locked.** `.claude/settings.json` limits what any AI working
-    in this folder can read, run and reach. Never loosen it, never add `allow` rules to it, and
-    keep `server/lockdown.test.ts` passing. `SECURITY.md` explains the threat model.
+14. **The lockdown settings stay locked.** `.claude/settings.json`, and its twin for Codex
+    `.codex/config.toml` (with `AGENTS.md`), limit what any AI working in this folder can read,
+    run and reach. Never loosen them, never add `allow` rules, and keep
+    `server/lockdown.test.ts` passing. `SECURITY.md` explains the threat model.
 
 ## Engineering rules
 
