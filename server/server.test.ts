@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { dispatch } from "../src/core/dispatch";
+import { Designs } from "./crew/designs";
 import { Facility } from "./facility";
 import { createFacilityServer } from "./http";
 import { Store } from "./store";
@@ -90,10 +91,12 @@ describe("HTTP API", () => {
   let facility: Facility;
   let base: string;
   let close: () => void;
+  let designs: Designs;
 
   beforeEach(async () => {
     facility = new Facility(new Store(":memory:"));
-    const server = createFacilityServer(facility, { staticDir: null, allowedHosts: ["127.0.0.1", "localhost"] });
+    designs = new Designs(mkdtempSync(join(tmpdir(), "facility-http-")));
+    const server = createFacilityServer(facility, { staticDir: null, allowedHosts: ["127.0.0.1", "localhost"], designs });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     close = () => server.close();
@@ -127,11 +130,22 @@ describe("HTTP API", () => {
     return ledger.getState().approvals[0].id;
   }
 
+  it("shows a saved design as a picture that can't run scripts", async () => {
+    const id = designs.save('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    const res = await fetch(`${base}/api/designs/${id}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/svg+xml");
+    expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");
+    expect(res.headers.get("content-security-policy")).toContain("sandbox");
+    expect((await fetch(`${base}/api/designs/..%2Ffacility.db`)).status).toBe(404);
+    expect((await fetch(`${base}/api/designs/0000000000000000`)).status).toBe(404);
+  });
+
   it("serves the current state", async () => {
     const res = await fetch(`${base}/api/state`);
     const body = await res.json();
     expect(body.state.wings.length).toBeGreaterThan(0);
-    expect(body.control).toEqual({ running: true, speed: 1 });
+    expect(body.control).toEqual({ running: true, speed: 1, mode: "demo" });
   });
 
   it("approves work for the owner", async () => {
@@ -218,7 +232,7 @@ describe("HTTP API", () => {
     expect((await post("/api/agents/scout/pause", { paused: false })).status).toBe(401);
     expect(facility.ledger.agent("scout")?.status).toBe("paused");
     expect((await post("/api/control", { running: false, speed: 4 })).status).toBe(200);
-    expect(facility.getControl()).toEqual({ running: false, speed: 4 });
+    expect(facility.getControl()).toEqual({ running: false, speed: 4, mode: "demo" });
     expect((await post("/api/control", { running: true })).status).toBe(401);
     expect(facility.getControl().running).toBe(false);
     await post("/api/control", { speed: 1000 });

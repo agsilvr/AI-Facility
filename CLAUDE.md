@@ -102,7 +102,10 @@ Read them before every change and follow them without exception.
 
 - `server/`: local HTTP server, SQLite store (state, history, audit), the owner's PIN
   (`owner.ts`), and the running facility.
-- `server/agents/`: the locked-down AI reader.
+- `server/agents/`: the locked-down AI reader (Claude or Qwen).
+- `server/crew/`: the real crew (`live`): what each stage asks its model (`jobs`), and the
+  designs it makes (`designs`). `FACILITY_MODE=live` turns it on; otherwise the labelled demo
+  runs.
 - `scripts/`: macOS service install and uninstall.
 - `src/client/`: the browser's connection to the server.
 - `src/core/`: types, ledger, dispatch, the model router (`models`), safety checks, workflow

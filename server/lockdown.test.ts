@@ -35,6 +35,18 @@ describe("Claude Code lockdown settings", () => {
     },
   );
 
+  it("can't read the DeepSeek key in .env, even from a shell command", () => {
+    expect(deny).toContain("Read(./.env)");
+    expect(settings.sandbox.filesystem.denyRead).toContain("./.env");
+  });
+
+  it("can't read mail or messages, with its file tools or from a shell command", () => {
+    for (const app of ["Mail", "Messages"]) {
+      expect(deny).toContain(`Read(~/Library/${app}/**)`);
+      expect(settings.sandbox.filesystem.denyRead).toContain(`~/Library/${app}`);
+    }
+  });
+
   it("can't read the facility's database or PIN setup link, even from a shell command", () => {
     expect(settings.sandbox.filesystem.denyRead).toContain("./data");
   });

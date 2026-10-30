@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname, join, normalize, resolve, sep } from "node:path";
+import type { Designs } from "./crew/designs";
 import type { Facility } from "./facility";
 
 const PUSH_EVERY_MS = 150;
@@ -30,6 +31,8 @@ export interface ServerOptions {
   staticDir: string | null;
   /** Host names the facility answers to; anything else is refused. */
   allowedHosts: string[];
+  /** The crew's designs, shown on approval cards. */
+  designs?: Designs;
 }
 
 /**
@@ -41,9 +44,8 @@ export interface ServerOptions {
  * program on this Mac can't press them either.
  */
 export function createFacilityServer(facility: Facility, options: ServerOptions) {
-  const { staticDir, allowedHosts } = options;
   return createServer((req, res) => {
-    handle(facility, staticDir, allowedHosts, req, res).catch((err: unknown) => {
+    handle(facility, options, req, res).catch((err: unknown) => {
       const status = err instanceof HttpError ? err.status : 500;
       if (status === 500) console.error(err);
       if (!res.headersSent) sendJson(res, status, { error: err instanceof Error ? err.message : "Error" });
@@ -52,13 +54,8 @@ export function createFacilityServer(facility: Facility, options: ServerOptions)
   });
 }
 
-async function handle(
-  facility: Facility,
-  staticDir: string | null,
-  allowedHosts: string[],
-  req: IncomingMessage,
-  res: ServerResponse,
-) {
+async function handle(facility: Facility, options: ServerOptions, req: IncomingMessage, res: ServerResponse) {
+  const { staticDir, allowedHosts, designs } = options;
   checkHost(req, allowedHosts);
   const url = new URL(req.url ?? "/", "http://facility.local");
   const path = url.pathname;
@@ -68,6 +65,20 @@ async function handle(
     return sendJson(res, 200, { state: facility.ledger.getState(), control: facility.getControl() });
   }
   if (req.method === "GET" && path === "/api/events") return streamEvents(facility, req, res);
+
+  const design = path.match(/^\/api\/designs\/([^/]+)$/);
+  if (req.method === "GET" && design) {
+    const svg = designs?.read(design[1]);
+    if (!svg) throw new HttpError(404, "No such design");
+    // Shown as a picture only: even opened directly, it can't run scripts or load anything.
+    res.writeHead(200, {
+      "Content-Type": "image/svg+xml",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, max-age=86400",
+    });
+    return res.end(svg);
+  }
 
   if (req.method === "GET" && path === "/api/owner") {
     const token = sessionCookie(req);

@@ -7,13 +7,14 @@ interface Props {
   state: FacilityState;
   running: boolean;
   speed: number;
+  mode: "demo" | "live";
   onToggleRunning: () => void;
   onSpeed: (speed: number) => void;
   owner: Owner;
   now: number;
 }
 
-export function TopBar({ state, running, speed, onToggleRunning, onSpeed, owner, now }: Props) {
+export function TopBar({ state, running, speed, mode, onToggleRunning, onSpeed, owner, now }: Props) {
   const pending = state.approvals.filter((a) => a.status === "pending").length;
   const done = completedCount(state);
   const working = state.agents.filter((a) => a.status === "working").length;
@@ -24,7 +25,11 @@ export function TopBar({ state, running, speed, onToggleRunning, onSpeed, owner,
         <span className="brand-mark" aria-hidden>▼</span>
         <div>
           <h1>AI Facility</h1>
-          <span className="demo-badge">Demo mode · simulated agents</span>
+          {mode === "demo" ? (
+            <span className="demo-badge">Demo mode · simulated agents</span>
+          ) : (
+            <span className="live-badge">Live · real models at work</span>
+          )}
         </div>
       </div>
 
@@ -59,14 +64,17 @@ export function TopBar({ state, running, speed, onToggleRunning, onSpeed, owner,
         <button onClick={onToggleRunning} className={running ? "" : "primary"}>
           {running ? "Pause facility" : "Resume facility"}
         </button>
-        <label className="speed">
-          Speed
-          <select value={speed} onChange={(e) => onSpeed(Number(e.target.value))}>
-            <option value={1}>1×</option>
-            <option value={2}>2×</option>
-            <option value={4}>4×</option>
-          </select>
-        </label>
+        {/* Real models take the time they take; only the demo can be sped up. */}
+        {mode === "demo" && (
+          <label className="speed">
+            Speed
+            <select value={speed} onChange={(e) => onSpeed(Number(e.target.value))}>
+              <option value={1}>1×</option>
+              <option value={2}>2×</option>
+              <option value={4}>4×</option>
+            </select>
+          </label>
+        )}
       </div>
     </header>
   );

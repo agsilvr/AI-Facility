@@ -2,6 +2,9 @@ import { rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { qwenReady, runReader } from "./agents/reader";
+import { Designs } from "./crew/designs";
+import { LiveCrew } from "./crew/live";
 import { Facility } from "./facility";
 import { createFacilityServer } from "./http";
 import { Store } from "./store";
@@ -16,7 +19,21 @@ const here = fileURLToPath(new URL(".", import.meta.url));
 const staticDir = process.env.FACILITY_STATIC_DIR ?? resolve(here, "..", "..", "dist");
 
 const store = new Store(join(dataDir, "facility.db"));
-const facility = new Facility(store);
+// FACILITY_MODE=live puts the real crew to work; otherwise it's the labelled demo.
+const live = process.env.FACILITY_MODE === "live";
+const designs = new Designs(dataDir);
+const facility = new Facility(
+  store,
+  live
+    ? (ledger) =>
+        new LiveCrew(ledger, {
+          think: (model, req) => runReader({ ...req, model }, { audit: (e) => store.addAudit(e) }),
+          designs,
+          qwenReady: () => qwenReady(),
+          shop: () => store.getSetting("shop_brief") ?? "",
+        })
+    : undefined,
+);
 facility.start();
 
 // Until the owner sets an approval PIN, nothing can be approved. The first PIN
@@ -31,7 +48,7 @@ if (setupCode) {
   rmSync(setupFile, { force: true });
 }
 
-const server = createFacilityServer(facility, { staticDir, allowedHosts });
+const server = createFacilityServer(facility, { staticDir, allowedHosts, designs });
 server.listen(port, host, () => {
   console.log(`AI Facility running at http://${host === "127.0.0.1" ? "localhost" : host}:${port}`);
   console.log(`Data: ${dataDir}`);

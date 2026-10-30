@@ -2,7 +2,8 @@
 # Installs the AI Facility as an always-on background service on this Mac.
 # Run it from the repository folder, signed in as the Business macOS user:
 #
-#   ./scripts/install-macos.sh            # runs while the Business user is logged in
+#   ./scripts/install-macos.sh            # runs while the Business user is logged in, with the real crew
+#   ./scripts/install-macos.sh --demo     # the simulated demo crew instead
 #   ./scripts/install-macos.sh --at-boot  # runs from startup, even before anyone logs in (asks for an admin password)
 #
 # Re-running it is safe: it rebuilds and restarts the service.
@@ -11,7 +12,13 @@ set -euo pipefail
 LABEL="com.aifacility.server"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 AT_BOOT=false
-[[ "${1:-}" == "--at-boot" ]] && AT_BOOT=true
+MODE=live
+for arg in "$@"; do
+  case "$arg" in
+    --at-boot) AT_BOOT=true ;;
+    --demo) MODE=demo ;;
+  esac
+done
 
 [[ "$(uname)" == "Darwin" ]] || { echo "This installer is for macOS."; exit 1; }
 
@@ -25,6 +32,17 @@ if ! "$NODE" -e 'const [a,b]=process.versions.node.split(".").map(Number);proces
   echo "Node.js $NODE_VERSION is too old. Install version 22.13 or newer from https://nodejs.org."
   exit 1
 fi
+
+# The real crew runs Claude Code, signed in to the owner's subscription. A
+# background service starts with almost no PATH, so give it the folders where
+# node and claude live.
+CLAUDE="$(command -v claude || true)"
+if [[ "$MODE" == live && -z "$CLAUDE" ]]; then
+  echo "Claude Code isn't installed for this user, so writing listings will stop and wait for you until it is."
+fi
+SERVICE_PATH="$(dirname "$NODE")"
+[[ -n "$CLAUDE" ]] && SERVICE_PATH="$SERVICE_PATH:$(dirname "$CLAUDE")"
+SERVICE_PATH="$SERVICE_PATH:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 
 echo "Building the facility..."
 cd "$REPO"
@@ -55,6 +73,8 @@ plist() {
   <dict>
     <key>FACILITY_DATA_DIR</key><string>$DATA_DIR</string>
     <key>HOME</key><string>$HOME</string>
+    <key>PATH</key><string>$SERVICE_PATH</string>
+    <key>FACILITY_MODE</key><string>$MODE</string>
   </dict>
   $1
   <key>RunAtLoad</key><true/>

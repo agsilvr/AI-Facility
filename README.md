@@ -18,9 +18,16 @@ research when Qwen is busy. Claude writes every listing, reply and daily briefin
 your ChatGPT subscription, draws the designs, with type-only designs drawn in code when it's
 busy. DeepSeek runs on your existing credits; nothing else pays per call. The Crew tab shows which model each crew member is using and what each has spent.
 
-**Status: Phase 2 (local server, demo crew).** The facility runs as a background service on
-the Mac mini, keeps its data in a local database, and carries on when the browser is closed.
-The crew is still simulated, so nothing costs money.
+**Live or demo.** The installer turns on the real crew: Qwen researches a product idea every
+few hours, a type-only design is drawn for it, and Claude writes the listing for you to
+approve. Claude also writes a short daily briefing. Anything that goes wrong stops and waits
+in Needs you with a Try again button; nothing is retried on its own. Publishing waits until
+Printify is connected. Run the installer with `--demo` for the simulated crew instead; the
+top bar always says which one is running.
+
+**Status: Phase 3 (real crew, not yet publishing).** The facility runs as a background
+service on the Mac mini, keeps its data in a local database, and carries on when the browser
+is closed. The real crew drafts products and briefings; nothing reaches Etsy yet.
 
 ## Install on the Mac mini
 

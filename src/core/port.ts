@@ -4,6 +4,8 @@ import type { AgentId, ApprovalId, FacilityState } from "./types";
 export interface Control {
   running: boolean;
   speed: number;
+  /** Demo: simulated crew with canned output. Live: real models do the work. Shown on screen either way. */
+  mode: "demo" | "live";
 }
 
 /**

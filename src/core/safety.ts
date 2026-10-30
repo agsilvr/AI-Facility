@@ -112,7 +112,7 @@ export function hasBlockingFlag(flags: Flag[]) {
 export function serializeDraft(d: Draft | undefined): string {
   if (!d) return "null";
   return d.kind === "listing"
-    ? JSON.stringify({ kind: d.kind, title: d.title, description: d.description, tags: d.tags, priceUsd: d.priceUsd })
+    ? JSON.stringify({ kind: d.kind, title: d.title, description: d.description, tags: d.tags, priceUsd: d.priceUsd, design: d.design ?? null })
     : JSON.stringify({ kind: d.kind, message: d.message });
 }
 

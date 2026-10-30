@@ -131,6 +131,8 @@ export interface Task {
   approvedContent?: string;
   /** When the owner approved it. An approval is good for APPROVAL_TTL_MS, and for one action. */
   approvedAt?: number;
+  /** What later stages work from, written by an earlier one: for a product, the idea from research. */
+  brief?: string;
   /** The model working on the current stage, chosen by the router when the stage started. */
   model?: ModelId;
   /** Why the task can't start its next stage yet, e.g. a model's monthly cap is used up. */
@@ -143,6 +145,8 @@ export interface ListingDraft {
   description: string;
   tags: string[];
   priceUsd: number;
+  /** The design file this listing uses (see server/crew/designs.ts); part of what the owner approves. */
+  design?: string;
 }
 
 export interface ReplyDraft {
@@ -173,6 +177,8 @@ export interface Approval {
   content?: string;
   flags: Flag[];
   status: ApprovalStatus;
+  /** A failed stage, not a decision: it can't be approved, only tried again. */
+  kind?: "failure";
   createdAt: number;
   decidedAt?: number;
 }
