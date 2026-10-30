@@ -1,4 +1,10 @@
-import type { Agent, FacilityState, ModelId, Task } from "../core/types";
+import type {
+  Agent,
+  FacilityState,
+  ModelId,
+  OperatorId,
+  Task,
+} from "../core/types";
 export function agentModel(state: FacilityState, agent: Agent): ModelId | null {
   const task = state.tasks.find((t) => t.id === agent.taskId);
   if (task?.model) return task.model;
@@ -8,7 +14,58 @@ export function agentModel(state: FacilityState, agent: Agent): ModelId | null {
     return state.operator?.active ?? "claude";
   return null;
 }
-export function failureSummary(message: string) {
+export function needsLogin(message: string) {
+  // Only explicit authentication failures belong in Login needed. Credits,
+  // rate limits and unavailable connections need different recovery actions.
+  return /(?:not|aren.t) (?:logged|signed) in|(?:log|sign)[ -]?in required|please (?:log|sign)[ -]?in|authentication[_ -](?:error|required|failed)|invalid (?:api key|authentication|credentials)|unauthori[sz]ed|expired (?:token|session)|run (?:\/login|claude auth login|codex login)/i.test(
+    message,
+  );
+}
+export const JOB_CATEGORIES = [
+  { id: "all", label: "All jobs" },
+  { id: "approval", label: "Approval" },
+  { id: "login", label: "Login needed" },
+  { id: "blocked", label: "Blocked" },
+  { id: "active", label: "In progress" },
+  { id: "waiting", label: "Waiting" },
+  { id: "done", label: "Done" },
+] as const;
+export type JobFilter = (typeof JOB_CATEGORIES)[number]["id"];
+export type JobCategory = Exclude<(typeof JOB_CATEGORIES)[number]["id"], "all">;
+export function jobCategory(state: FacilityState, task: Task): JobCategory {
+  if (task.state === "done") return "done";
+  if (task.state === "active") return "active";
+  const pending = state.approvals.find(
+    (a) => a.taskId === task.id && a.status === "pending",
+  );
+  if (pending && pending.kind !== "failure") return "approval";
+  if (
+    needsLogin(
+      [task.waiting, ...(pending?.flags.map((f) => f.message) ?? [])].join(" "),
+    )
+  )
+    return "login";
+  if (pending?.kind === "failure") return "blocked";
+  return task.waiting ? "waiting" : "active";
+}
+export function taskTone(state: FacilityState, task: Task) {
+  const category = jobCategory(state, task);
+  return category === "done"
+    ? "sage"
+    : ["blocked", "login", "approval"].includes(category)
+      ? "amber"
+      : "";
+}
+export function failureSummary(
+  message: string,
+  operator: OperatorId = "claude",
+) {
+  if (needsLogin(message))
+    return {
+      title: "Sign-in required",
+      detail:
+        "Sign in through the model’s official app, then retry this step. Saved work is retained.",
+    };
   if (/Printify isn't connected/i.test(message))
     return {
       title: "Publishing is not connected",
@@ -19,7 +76,9 @@ export function failureSummary(message: string) {
     return {
       title: "Claude could not finish this step",
       detail:
-        "Your work is saved. Use Codex as the temporary operator, then retry this job when ready.",
+        operator === "codex"
+          ? "Codex is now the active operator. Retry this step to continue from the saved work."
+          : "Switch to Codex in Command, then retry this step. Saved work is retained.",
     };
   if (/Codex.*unavailable/i.test(message))
     return {
@@ -41,16 +100,10 @@ export function failureSummary(message: string) {
   };
 }
 export function taskState(state: FacilityState, task: Task) {
-  if (task.state === "done") return "Completed";
-  if (task.state === "active") return "Working";
-  if (task.state === "queued")
-    return task.waiting ? "Waiting for model" : "Queued";
-  return state.approvals.some(
-    (a) =>
-      a.taskId === task.id && a.status === "pending" && a.kind === "failure",
-  )
-    ? "Stopped safely"
-    : "Ready for review";
+  const category = jobCategory(state, task);
+  if (category === "active")
+    return task.state === "active" ? "Running" : "Queued";
+  return JOB_CATEGORIES.find((c) => c.id === category)!.label;
 }
 export const ROOM_DESCRIPTIONS: Record<string, string> = {
   command:

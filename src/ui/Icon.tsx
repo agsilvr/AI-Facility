@@ -19,6 +19,11 @@ const paths = {
   link: "m10 14 4-4M8 16l-2 2a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m2 1 2-2a4 4 0 0 1 6 6l-5 5a4 4 0 0 1-6 0",
   spark: "m12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7Z",
   help: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm-3 6a3 3 0 0 1 6 0c0 2-3 2-3 5m0 3h.01",
+  back: "M20 12H4m6-6-6 6 6 6",
+  lock: "M6 10h12v11H6V10Zm3 0V6a3 3 0 0 1 6 0v4m-3 5v2",
+  unlock: "M6 10h12v11H6V10Zm3 0V6a3 3 0 0 1 6 0m-3 9v2",
+  settings: "M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6m-8 0v6",
+  fit: "M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6",
 } as const;
 export type IconName = keyof typeof paths;
 export function Icon({

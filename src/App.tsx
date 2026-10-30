@@ -7,10 +7,13 @@ import { Sidebar, WORKSPACE_TABS, type WorkspaceTab } from "./ui/Sidebar";
 import { TopBar } from "./ui/TopBar";
 import { Icon } from "./ui/Icon";
 import { useFacility } from "./ui/useFacility";
+import type { JobFilter } from "./ui/presentation";
 export function App() {
   const facility = useMemo(() => new RemoteFacility(), []);
   useFacility(facility);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [jobFilter, setJobFilter] = useState<JobFilter>("all");
+  const [jobId, setJobId] = useState<string | null>(null);
   const [tab, setTab] = useState<WorkspaceTab>("command");
   const [now, setNow] = useState(Date.now());
   const owner = useOwner(facility, now);
@@ -25,7 +28,10 @@ export function App() {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (document.querySelector('[aria-modal="true"]')) return;
-      if (event.key === "Escape") setSelection(null);
+      if (event.key === "Escape") {
+        setSelection(null);
+        setJobId(null);
+      }
       if (
         (event.target as HTMLElement)?.matches(
           "input, textarea, select, [contenteditable]",
@@ -34,7 +40,12 @@ export function App() {
         return;
       if (event.altKey && /^[1-5]$/.test(event.key)) {
         event.preventDefault();
-        setTab(WORKSPACE_TABS[Number(event.key) - 1].id);
+        setJobFilter("all");
+        const next = WORKSPACE_TABS[Number(event.key) - 1].id;
+        setTab(next);
+        document.getElementById(`tab-${next}`)?.focus();
+        setSelection(null);
+        setJobId(null);
       }
     };
     window.addEventListener("keydown", handler);
@@ -44,22 +55,36 @@ export function App() {
     return (
       <div className="boot">
         <span className="brand-mark">
-          <Icon name="leaf" size={32} />
+          <Icon name="command" size={32} />
         </span>
-        <h1>Welcome to the facility.</h1>
+        <h1>AI Facility</h1>
         <p role="status">
           {facility.connection === "offline"
             ? "Waiting for the local server. Reconnecting…"
-            : "Opening your workspace…"}
+            : "Connecting to the facility…"}
         </p>
       </div>
     );
   const state = facility.getState();
   const control = facility.getControl();
-  const working = state.agents.filter((a) => a.status === "working").length;
-  const startResearch = () => {
-    setTab("research");
+  const changeTab = (next: WorkspaceTab) => {
+    setJobFilter("all");
     setSelection(null);
+    setJobId(null);
+    setTab(next);
+  };
+  const selectMap = (next: Selection | null) => {
+    setJobId(null);
+    setSelection(next);
+  };
+  const openJobs = (filter: JobFilter) => {
+    changeTab("work");
+    setJobFilter(filter);
+  };
+  const selectJob = (id: string | null) => {
+    setSelection(null);
+    setTab("work");
+    setJobId(id);
   };
   return (
     <div className="app">
@@ -82,104 +107,12 @@ export function App() {
           facility.setControl({ running: !control.running })
         }
         onSpeed={(speed) => facility.setControl({ speed })}
-        onResearch={startResearch}
-        onWork={() => setTab("work")}
+        connected={facility.connection === "online"}
+        onWork={() => changeTab("work")}
       />
-      <main className="main" id="workspace">
-        <section className="map-panel" aria-label="Live facility map">
-          <div className="scene-heading">
-            <div>
-              <span className="eyebrow">THE FACILITY / ETSY WING</span>
-              <h2>
-                Your business, taking shape<span>.</span>
-              </h2>
-              <p>
-                A living workspace. Select a room or crew member to look closer.
-              </p>
-            </div>
-            <div className="scene-stats">
-              <span className="crew-cluster">
-                <i />
-                <i />
-                <i />
-              </span>
-              <span>
-                <strong>
-                  {working} of {state.agents.length}
-                </strong>
-                <small>crew at work</small>
-              </span>
-            </div>
-          </div>
-          <div className="map-frame">
-            <FacilityView
-              ledger={facility}
-              selection={selection}
-              onSelect={(s) => {
-                setSelection(s);
-              }}
-            />
-            <div className="map-caption">
-              <span>
-                <i />
-                {control.mode === "demo" ? "SIMULATION" : "LIVE FACILITY"}
-              </span>
-              <span>
-                {control.running
-                  ? working
-                    ? "Work is in motion"
-                    : "Crew ready · waiting for assignments"
-                  : "Paused · jobs safely held"}
-              </span>
-              <span className="map-caption-right">
-                <Icon name="shield" size={13} /> Approval protected
-              </span>
-            </div>
-          </div>
-          <div className="scene-footer">
-            <span>
-              <Icon name="leaf" size={15} /> Built for a little more
-              possibility.
-            </span>
-            <details className="map-help">
-              <summary>
-                <Icon name="help" size={15} />
-                Map & keyboard guide
-              </summary>
-              <div>
-                <strong>Make yourself at home</strong>
-                <p>
-                  Drag to explore. Scroll or pinch to zoom. Select a room or
-                  person for details.
-                </p>
-                <p>
-                  Arrow keys pan the focused map. + / − zoom. Escape closes
-                  details. Option 1–5 changes workspace sections.
-                </p>
-                <p>
-                  Use Fit facility to return to the whole map. Your controls
-                  never publish without approval.
-                </p>
-              </div>
-            </details>
-          </div>
-        </section>
-        <Sidebar
-          ledger={facility}
-          state={state}
-          now={now}
-          live={control.mode === "live"}
-          running={control.running}
-          pinSet={owner.status?.pinSet ?? true}
-          tab={tab}
-          onTab={setTab}
-          selection={selection}
-          onSelect={setSelection}
-        />
-      </main>
       {facility.commandError && (
-        <div className="command-toast" role="alert">
-          <Icon name="help" size={20} />
+        <div className="error-banner" role="alert">
+          <Icon name="help" size={17} />
           <span>{facility.commandError}</span>
           <button
             className="icon-button"
@@ -190,6 +123,32 @@ export function App() {
           </button>
         </div>
       )}
+      <main className="main" id="workspace">
+        <section className="map-panel" aria-label="Live facility map">
+          <FacilityView
+            ledger={facility}
+            selection={selection}
+            onSelect={selectMap}
+          />
+        </section>
+        <Sidebar
+          ledger={facility}
+          state={state}
+          now={now}
+          live={control.mode === "live"}
+          running={control.running}
+          pinSet={owner.status?.pinSet ?? true}
+          tab={tab}
+          onTab={changeTab}
+          jobId={jobId}
+          jobFilter={jobFilter}
+          onJobFilter={setJobFilter}
+          onJobs={openJobs}
+          onJobSelect={selectJob}
+          selection={selection}
+          onSelect={selectMap}
+        />
+      </main>
       <OwnerDialog owner={owner} />
     </div>
   );

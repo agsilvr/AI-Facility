@@ -6,11 +6,11 @@ interface Props {
   running: boolean;
   speed: number;
   mode: "demo" | "live";
+  connected: boolean;
   onToggleRunning: () => void;
   onSpeed: (speed: number) => void;
   owner: Owner;
   now: number;
-  onResearch: () => void;
   onWork: () => void;
 }
 export function TopBar({
@@ -18,11 +18,11 @@ export function TopBar({
   running,
   speed,
   mode,
+  connected,
   onToggleRunning,
   onSpeed,
   owner,
   now,
-  onResearch,
   onWork,
 }: Props) {
   const pending = state.approvals.filter((a) => a.status === "pending").length;
@@ -30,59 +30,53 @@ export function TopBar({
     <header className="topbar">
       <div className="brand">
         <span className="brand-mark">
-          <Icon name="leaf" size={27} />
+          <Icon name="command" size={21} />
         </span>
-        <div>
-          <h1>
-            AI Facility<span className="brand-dot">.</span>
-          </h1>
-          <p>A home for your ideas to become real.</p>
-        </div>
+        <h1>AI FACILITY</h1>
       </div>
-      <div className="topbar-center">
-        <span className={`status-chip ${running ? "" : "paused"}`}>
-          <i />
-          {mode === "demo"
-            ? "Demo · simulated work"
+      <span className={`status-chip ${!connected || !running ? "paused" : ""}`}>
+        <i />
+        {!connected
+          ? "Reconnecting"
+          : mode === "demo"
+            ? running
+              ? "Demo · simulated"
+              : "Demo · paused"
             : running
-              ? "Facility online"
-              : "Facility paused"}
-        </span>
-        <span className="header-date">
-          {new Date(now).toLocaleDateString("en-US", {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-            timeZone: "America/New_York",
-          })}
-        </span>
-      </div>
+              ? "Live"
+              : "Paused"}
+      </span>
       <div className="controls">
-        <button className="attention-button" onClick={onWork}>
-          <span className="count-circle">{pending}</span>
-          <span>Needs you</span>
-        </button>
+        {pending > 0 && (
+          <button
+            className="attention-button"
+            aria-label={`${pending} ${pending === 1 ? "job needs" : "jobs need"} attention`}
+            onClick={onWork}
+          >
+            <span className="count-circle">{pending}</span>
+            <span>Needs attention</span>
+          </button>
+        )}
         <OwnerBadge owner={owner} now={now} />
         <button
-          className="icon-button pause-button"
+          className="pause-button"
+          disabled={!connected}
           aria-label={running ? "Pause facility" : "Resume facility"}
           title={
             running
-              ? "Pause all work. In-flight answers cannot advance jobs."
-              : "Resume facility · owner PIN required"
+              ? "Hold all work, including in-flight answers"
+              : "Resume work · owner PIN required"
           }
           onClick={onToggleRunning}
         >
-          <Icon name={running ? "pause" : "play"} size={18} />
-        </button>
-        <button className="primary new-research" onClick={onResearch}>
-          <Icon name="spark" size={16} />
-          New research
+          <Icon name={running ? "pause" : "play"} size={16} />
+          <span>{running ? "Pause" : "Resume"}</span>
         </button>
         {mode === "demo" && (
           <label className="speed">
-            Speed
+            <span>Speed</span>
             <select
+              aria-label="Simulation speed"
               value={speed}
               onChange={(e) => onSpeed(Number(e.target.value))}
             >

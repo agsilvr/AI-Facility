@@ -14,6 +14,7 @@ import {
   type OwnerStatus,
 } from "../client/owner";
 import type { RemoteFacility } from "../client/remote";
+import { Icon } from "./Icon";
 
 // Everything on screen about the owner's PIN: asking for it when the server
 // refuses a decision, setting the first one from the installer's setup link,
@@ -302,7 +303,7 @@ export function OwnerBadge({ owner, now }: { owner: Owner; now: number }) {
         className="owner-badge warn"
         title="Approvals are locked until you choose a PIN"
       >
-        🔒 No PIN set
+        <Icon name="lock" size={15} /> Set up owner PIN
       </span>
     );
   }
@@ -317,7 +318,8 @@ export function OwnerBadge({ owner, now }: { owner: Owner; now: number }) {
         onClick={owner.lockNow}
         title="Lock now: the next decision will ask for your PIN"
       >
-        🔓 Unlocked · {minutes}m · Lock
+        <Icon name="unlock" size={15} /> <span>Lock</span>
+        <small>{minutes}m</small>
       </button>
     );
   }
@@ -327,7 +329,7 @@ export function OwnerBadge({ owner, now }: { owner: Owner; now: number }) {
       onClick={owner.ask}
       title="Enter your PIN now so decisions go straight through"
     >
-      🔒 Locked
+      <Icon name="lock" size={15} /> <span>Unlock</span>
     </button>
   );
 }
