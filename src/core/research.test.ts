@@ -42,6 +42,25 @@ describe("public research evidence contract", () => {
     expect(researchEvidenceProblem(fake.opportunities)).toContain("provenance");
   });
 
+  it("rejects malformed saved creative fields without crashing readiness", () => {
+    for (const keyword of [7, null, {}, ["reader gift"]]) {
+      const saved = researchNotebook();
+      Object.assign(saved.opportunities[0], { keyword });
+      expect(readResearch(JSON.stringify(saved))).toBeNull();
+      expect(currentResearch(saved, Date.UTC(2026, 9, 31))).toBe(false);
+    }
+  });
+
+  it("does not certify edited summaries or removed evidence limitations", () => {
+    const now = Date.UTC(2026, 9, 31);
+    const summary = researchNotebook();
+    summary.summary = "These products are proven to earn $10,000 per month.";
+    expect(currentResearch(summary, now)).toBe(false);
+    const limitations = researchNotebook();
+    limitations.limitations = [];
+    expect(currentResearch(limitations, now)).toBe(false);
+  });
+
   it("preserves distinct provenance for trends, purchase reviews and supply information", () => {
     expect(new Set(RESEARCH_SOURCES.map((source) => source.id)).size).toBe(RESEARCH_SOURCES.length);
     for (const source of RESEARCH_SOURCES) {

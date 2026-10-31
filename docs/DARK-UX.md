@@ -35,11 +35,12 @@ No StarNet code, fonts, packages or assets were copied.
   search and filter, and returns focus to the job row.
 - **Lab:** local Qwen research action and latest notebook. Directions expand to
   evidence and next steps. Saved-source limitations are explicit. Research cadence
-  follows the separate daily-research update; this redesign does not change it.
+  waits for changed usable evidence and has a minimum 24-hour automatic interval.
 - **Crew:** compact roster; selected agent shows its actual current/assigned model,
   location, status and assignment. Permissions are secondary.
-- **System:** Connections, Usage and Activity. “Standby” means router-enabled, not a
-  successful sign-in or credit check. Unbuilt integrations remain labelled.
+- **System:** Connections, Usage and Activity. Idle subscriptions say sign-in
+  unverified; a local Qwen readiness probe is distinct from a live assignment.
+  Unbuilt integrations remain labelled and offline snapshots show no live workers.
 
 The map owns the left area. Its toolbar, help and status are in normal layout flow;
 none covers rooms or approval actions. Smooth anchored zoom is preserved. At widths

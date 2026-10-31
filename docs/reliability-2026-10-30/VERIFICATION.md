@@ -21,3 +21,11 @@ Live API readback: mode live; production running false; automatic products false
 Installed Safari UI also checked at narrow width. Profit scenario controls were exercised with explicit test assumptions: $50 collected, $20 production, $8 shipping, 10% fees, $1 fixed fee, $3 acquisition, $1 return provision, $2 labor and $500 overhead. The visible result correctly shows $10 contribution, 1,050 required monthly orders and $52,500 collected revenue. The page is reloaded afterward to clear these unsaved test assumptions. This is arithmetic verification, not a prediction for the shop.
 
 Local implementation commit: `0d268fc`, branch `codex/automation-reliability`. Remote push and PR remain pending explicit approval after automatic approval review rejected the export. No alternate upload was attempted.
+
+## Continuation verification — 30 October, 9:56 PM America/New_York
+
+Four new regression cases failed against the prior implementation and passed after repair: malformed saved creative metadata, edited summary/limitations, and expired-source scheduling with and without an existing notebook. Full validation now passes **343 tests across 34 files**, type checking, production build and diff whitespace checks. No model prompt or image-generation behavior changed; the existing real Qwen receipts remain the bounded model evidence.
+
+An initial full test invocation inside the restricted sandbox could not open a loopback listener (`EPERM`) and stalled its HTTP fixtures. Its exact process handles were inspected and terminated. The complete suite then passed with local loopback permission; the failed environment invocation is not counted as a passing test.
+
+The follow-up also reconciles README, DESIGN, DARK-UX and RESEARCH-ACCESS with the actual schedule, code briefings, connection labels and navigation. Installation readback and completion boundaries are recorded in `COMPLETION-AUDIT.md`.

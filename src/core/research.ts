@@ -1,4 +1,4 @@
-/** Notebook analysis runs daily, separately from the product approval backlog. */
+/** Minimum interval for evidence analysis, separately from the product approval backlog. */
 export const RESEARCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /** Saved public observations, not a live collector or product-sales database. */
@@ -97,6 +97,21 @@ export const RESEARCH_SOURCES = [
 
 export const RESEARCH_VERSION = 2;
 export const RESEARCH_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const RESEARCH_SUMMARY = "Three product hypotheses from saved evidence. Their ranking is a model suggestion, not measured demand or profitability.";
+const RESEARCH_LIMITATIONS = [
+  "Analysis of saved evidence only; no live Etsy or competitor data was collected.",
+  "Concepts and suggested keywords are model proposals, not verified market facts.",
+  "Exact-product demand, supplier variant quotes, shipping, fees and margins remain unverified.",
+  "Asset provenance and commercial rights require a separate review; a generated proposal does not establish them.",
+];
+
+/** Re-running a model cannot refresh the date of the evidence it receives. */
+export function researchSourcesCurrent(now: number): boolean {
+  return RESEARCH_SOURCES.every((s) => {
+    const age = now - Date.parse(s.checkedAt + "T00:00:00Z");
+    return age >= 0 && age <= RESEARCH_MAX_AGE_MS;
+  });
+}
 export const PRODUCT_FAMILIES = {
   "bookish-crewneck": { label: "Bookish-cat DTG crewneck", supplier: "printify-crewneck", buyers: ["etsy-book-history", "etsy-book-club-item", "etsy-book-cat-item"] },
   "pet-ornament": { label: "Personalized pet ornament", supplier: "printify-ornament-guide", buyers: ["etsy-seasonal", "etsy-pet-ornament-item"] },
@@ -162,7 +177,7 @@ export function researchEvidenceProblem(opportunities: ResearchOpportunity[]): s
     // lexical check, not a claim of complete semantic verification.
     if (/\b(?:demand|sales|revenue|profit(?:able|ability)?|competition|competitors?|saturat(?:ed|ion)|bestsell(?:er|ing)|conversion|high[- ]performing|(?:starting|base|catalog) prices?|guaranteed?)\b/i.test([o.title, o.audience, o.concept].join(" "))) return "Creative fields contain a market-performance or pricing claim. Describe only the proposed product and buyer; evidence and economics are supplied separately.";
     if (/non[- ]copyrighted|copyright[- ]free|commercially safe|royalty[- ]free|(?:cleared|verified) (?:rights|licen[sc]e)/i.test([o.title, o.audience, o.concept].join(" "))) return "Creative fields cannot certify copyright, commercial rights or licensing. Asset provenance requires a separate review.";
-    if (!o.keyword?.trim() || o.keyword.length > 70) return "Each hypothesis needs a specific buyer keyword to validate.";
+    if (typeof o.keyword !== "string" || !o.keyword.trim() || o.keyword.length > 70) return "Each hypothesis needs a specific buyer keyword to validate.";
     const family = o.family && Object.hasOwn(PRODUCT_FAMILIES, o.family) ? PRODUCT_FAMILIES[o.family] : undefined;
     if (!family || !o.sourceIds.every((id) => RESEARCH_SOURCES.some((s) => s.id === id))) return "Unknown family or evidence source.";
     if (new Set(o.sourceIds).size !== o.sourceIds.length) return "Duplicate citations do not add evidence.";
@@ -182,12 +197,9 @@ export function buildResearchReport(opportunities: ResearchOpportunity[]): Resea
   if (problem) throw new Error(problem);
   return {
     kind: "research-report", evidenceVersion: RESEARCH_VERSION,
-    summary: "Three product hypotheses from saved evidence. Their ranking is a model suggestion, not measured demand or profitability.",
+    summary: RESEARCH_SUMMARY,
     opportunities: opportunities.map((o) => ({ ...o, evidence: evidenceFor(o.sourceIds), nextStep: validationStep(o) })),
-    limitations: ["Analysis of saved evidence only; no live Etsy or competitor data was collected.",
-      "Concepts and suggested keywords are model proposals, not verified market facts.",
-      "Exact-product demand, supplier variant quotes, shipping, fees and margins remain unverified.",
-      "Asset provenance and commercial rights require a separate review; a generated proposal does not establish them."],
+    limitations: [...RESEARCH_LIMITATIONS],
     sources: RESEARCH_SOURCES,
   };
 }
@@ -200,6 +212,7 @@ export function readResearch(brief?: string): ResearchReport | null {
       || !Array.isArray(v.limitations) || !v.limitations.every((s: unknown) => typeof s === "string")
       || !Array.isArray(v.sources) || !v.sources.every((s: Record<string, unknown> | null) => s && [s.id, s.title, s.url, s.notes, s.checkedAt].every((x) => typeof x === "string") && /^https:\/\//.test(String(s.url)))) return null;
     if (!v.opportunities.every((o: ResearchOpportunity | null) => o && [o.title, o.audience, o.concept, o.evidence, o.nextStep].every((s) => typeof s === "string" && s.trim())
+      && (o.keyword === undefined || typeof o.keyword === "string") && (o.family === undefined || typeof o.family === "string")
       && Array.isArray(o.sourceIds) && o.sourceIds.length && o.sourceIds.every((s) => typeof s === "string"))) return null;
     return v;
   } catch { return null; }
@@ -208,10 +221,8 @@ export function readResearch(brief?: string): ResearchReport | null {
 /** Legacy reports are history, never silently certified under the new contract. */
 export function currentResearch(report: ResearchReport | null, now = Date.now()): boolean {
   if (!report || report.evidenceVersion !== RESEARCH_VERSION || JSON.stringify(report.sources) !== JSON.stringify(RESEARCH_SOURCES)
+    || report.summary !== RESEARCH_SUMMARY || JSON.stringify(report.limitations) !== JSON.stringify(RESEARCH_LIMITATIONS)
     || researchEvidenceProblem(report.opportunities)) return false;
   if (report.opportunities.some((o) => (o.evidence !== evidenceFor(o.sourceIds) || o.nextStep !== validationStep(o)))) return false;
-  return report.sources.every((s) => {
-    const age = now - Date.parse(s.checkedAt + "T00:00:00Z");
-    return age >= 0 && age <= RESEARCH_MAX_AGE_MS;
-  });
+  return researchSourcesCurrent(now);
 }

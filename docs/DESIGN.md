@@ -1,12 +1,12 @@
 # Facility workspace, October 2026
 
-The facility is a warm, legible command workspace with an original cottage-game influence: timber, muted greens, paper, stone, small crew sprites, and pools of warm light. Interface text uses readable system fonts; pixel lettering belongs to the map. All visual assets remain drawn in code and work without external fonts or image services.
+The facility is a dark, legible command workspace with warm code-drawn rooms and crew sprites. Interface text uses readable system fonts; pixel lettering belongs to the map. All visual assets remain drawn in code and work without external fonts or image services. See `DARK-UX.md` for the current visual tokens and information architecture, and `reliability-2026-10-30/AUDIT.md` for implemented reliability controls and remaining gaps.
 
 ## Layout and interaction
 
 - The map fills the available left workspace, including its height. It has a clear reset control, smooth pointer-anchored zoom, pinch gestures, keyboard panning, and an accessible guide.
 - Shared Command, Treasury, and Security rooms branch from the production spine. The numbered route reads Research → Design → Quality Control → Publishing → Archive/Outbox. Customer Care has its own workstation. Reserved expansion grows from a separate spur.
-- The right workspace has Command, Work, Research, Crew, and Activity sections. There is one map. Selecting a person or room reveals an inline dossier without covering the map.
+- The right workspace has Command, Jobs, Lab, Crew, and System sections. There is one map. Selecting a person or room replaces the right pane with a dossier without covering the map.
 - Dossiers show assigned/current model, model location, role-specific data access, workstation, status, and assignment. Code actors and file checks are labeled as code rather than as AI models.
 - Work is searchable and filterable. Jobs disclose their history, stage sequence, exact review package, and technical diagnostics on demand. Stopped jobs show a recovery explanation first.
 - Keyboard focus is visible. Tabs support arrow/Home/End keys; Option 1–5 changes sections. Escape closes the dossier. Owner dialogs trap focus and return it when dismissed. Reduced-motion preferences remove camera flight and transition effects.
@@ -19,7 +19,7 @@ These choices apply [NN/G's usability heuristics](https://www.nngroup.com/articl
 
 ## One operator at a time
 
-Claude is the normal operator; Codex can temporarily own writing and briefings through the official subscription CLI. Each handover increments a persisted generation. Owner-requested switches require the existing owner session and compare the generation, so a stale browser cannot overwrite a later handover. Only the elected operator receives new writing assignments.
+Claude is the normal operator; Codex can temporarily own writing through the official subscription CLI. Briefings use current ledger facts assembled by code. Each handover increments a persisted generation. Owner-requested switches require the existing owner session and compare the generation, so a stale browser cannot overwrite a later handover. Only the elected operator receives new writing assignments.
 
 Every attempt has a separate run token. A handover, pause, or agent pause invalidates the outgoing claim. Late answers are discarded; reported usage is still accounted for. Stopped jobs and owner approvals are retained. Returning to Claude uses the same handover mechanism; there is no automatic ping-pong between providers.
 
@@ -27,18 +27,18 @@ A Claude failure transfers leadership once to Codex. Existing stopped tasks stil
 
 New QC and agent configurations restore authority from code. Saved jobs migrate by stage identity when the QC stage is inserted, preserving existing drafts and approvals.
 
-## Daily research notebooks
+## Evidence research notebooks
 
-The Research notebook runs one bounded local Qwen job every 24 hours against two dated public sources, independently of the product approval backlog. The result is a saved report with three opportunities, evidence references, next validation steps and limitations. It is a standalone workflow: it does not chain to Claude or publish anything. Saved notebook creation times preserve the schedule across restarts, including manually requested runs. Unfinished or failed notebooks block new automatic runs; no missed-run backlog is replayed. The facility kill switch and Scout's pause still hold. Recent public report titles are passed as untrusted data to discourage repeated directions without exposing private shop plans.
+The Lab notebook runs one bounded local Qwen analysis of a changed usable evidence pack, with at least 24 hours between automatic starts, independently of the product approval backlog. An unchanged analyzed pack or expired source dates do not trigger another run. The result compares three product hypotheses with evidence references, next validation steps and limitations. It does not chain to Claude or publish anything. Saved tasks preserve the schedule across restarts. Unfinished or failed notebooks block new automatic runs; no missed-run backlog is replayed. The facility kill switch and Scout's pause still hold. Recent public report titles are untrusted data, never permission.
 
-The public evidence pack contains [Etsy's Fall/Winter 2026 report](https://www.etsy.com/seller-handbook/article/1521255894814) and [Printify's general poster information](https://printify.com/custom-posters/), checked October 30. Qwen analyzes these saved notes; it does not independently browse. Competitor prices, supplier variant costs, shipping and margins still need verification. Future retrieval should remain a controlled, read-only component rather than giving drafting models arbitrary tools.
+The public pack contains nine dated observations with separate buyer and supplier roles, saved in `src/core/research.ts`. Qwen proposes concepts and citations; code supplies factual evidence, limitations and validation steps. It does not independently browse. Supplier variant costs, shipping, exact-product demand and margins still need verification. Future retrieval must remain a controlled read-only component rather than giving drafting models arbitrary tools.
 
 ## Boundaries
 
-Image-generation handoff, supplier-specific print checks, real publishing, and accounting connections remain future work and are labeled accordingly. QC currently verifies the saved artwork file's existence and expected SVG format/dimensions; it is not a creative or supplier-readiness certification. Your creative approval remains required before outward actions.
+Image generation uses an official chat handoff; unattended generation, supplier-specific product checks, publishing and accounting connections remain incomplete. File checks inspect SVG dimensions or PNG integrity, alpha and visible bounds. They do not certify creative or supplier readiness. The complete design review and exact owner approval remain separate requirements.
 
 ## Shared work synchronization update
 
 External official-app/chat work now has persisted operation claims in the same ledger. The map's studio and other workstations, room status strip, Command counters, searchable Jobs, crew dossier and context/history cards all derive from those claims. Claims reserve a workstation, expire after a lost heartbeat, survive restart as interrupted handoffs, and reject a previous worker's result after reassignment. Completed phases leave visible receipts; paused and blocked work are distinguished from idle work. Offline views stop presenting saved activity as live.
 
-`docs/FACILITY-WORK.md` defines the required reporting protocol for Codex and Claude. The bridge cannot automatically see an unconnected AI session. A separate DeepSeek app is not a verified facility reader. Local research now uses nine dated sources with explicit evidence roles; the earlier two-source description above is historical. Current design checks and saved owner feedback are in `docs/DESIGN-QUALITY.md`. The design prompt no longer assumes all products are opaque wall posters.
+`docs/FACILITY-WORK.md` defines the required reporting protocol for Codex and Claude. The bridge cannot automatically see an unconnected AI session. A separate DeepSeek app is not a verified facility reader. Current design checks and saved owner feedback are in `docs/DESIGN-QUALITY.md`. The design prompt does not assume all products are opaque wall posters.

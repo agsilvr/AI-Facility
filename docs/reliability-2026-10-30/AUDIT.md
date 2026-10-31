@@ -16,6 +16,9 @@ Owner target: USD 10,000 per month **profit after costs**, confirmed in the audi
 10. Revision notes were overwritten rather than retained, and image revision attempts were unlimited. Feedback is retained in task history. A fourth artwork request is blocked after three attempts, with earlier immutable files preserved.
 11. An image could be attached to a waiting internal handoff while global production was paused. The HTTP boundary now rejects paused uploads before saving or advancing artwork.
 12. The app did not connect the profit goal to the actual incomplete pipeline. Command now shows the saved target, actual status, the five readiness stages and a cost-explicit scenario calculator. Assumptions are not measured results or publishing authority.
+13. Continuation review found that expired evidence could trigger another automatic analysis after 30 days. Scheduling now requires a current source pack before creating any new notebook; reanalysis cannot refresh retrieval dates. This was reproduced with and without a prior notebook, including restart recovery.
+14. A saved keyword with a non-string JSON value could crash current-research eligibility, and edited summaries or removed limitations could still be accepted. Malformed creative metadata is rejected; factual summaries and limitations must match the code-owned contract as well as source notes.
+15. README and design/access documents retained contradictory descriptions of daily reruns, AI briefings, model connections and navigation. They now describe the installed behavior consistently. The source manual and remaining product gates remain separate from file checks.
 
 ## Source audit
 

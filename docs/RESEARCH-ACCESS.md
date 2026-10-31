@@ -10,9 +10,11 @@ or provide that guarantee.
   cookies, Etsy login or platform actions. Application requests go only to
   `127.0.0.1:11434`, and HTTP redirects are rejected, including readiness checks.
   This is an application boundary, not an operating-system firewall for the Mac.
-- A standalone notebook is scheduled every 24 hours, independent of pending product
-  approvals. Saved tasks prevent duplicate scheduling across restarts. Unfinished or
-  failed notebooks block further automatic runs; pauses and budgets still apply.
+- A standalone notebook analyzes a changed, usable evidence pack at most once every
+  24 hours, independent of pending product approvals. An unchanged analyzed pack or
+  expired dates wait for refreshed evidence. Saved tasks prevent duplicate scheduling
+  across restarts. Unfinished or failed notebooks block further automatic runs;
+  pauses and budgets still apply.
 - Inputs are saved, dated public evidence and recent public idea titles. They are
   fenced as untrusted data. Output must match a schema, cite known evidence, and is
   saved with an explicit statement that no live Etsy data was collected.
@@ -41,7 +43,7 @@ provides seller-facing search and listing counts. Use that tool directly for cur
 validation within its available limits. It is not a grant to automate its browser
 interface or feed its data into an unrestricted automated pipeline.
 
-Until an authorized collection source is connected, daily reports remain analysis
+Until an authorized collection source is connected, notebooks remain analysis
 of saved evidence, not fresh competitor monitoring. Independent public or licensed
 sources can be evaluated separately for their permitted uses.
 

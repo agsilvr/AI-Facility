@@ -55,4 +55,17 @@ describe("daily research planning", () => {
     planResearch(ledger, start + RESEARCH_INTERVAL_MS * 7);
     expect(notebooks(ledger)).toHaveLength(2);
   });
+
+  it.each([false, true])("waits for refreshed evidence when the pack expires (prior notebook: %s)", (existing) => {
+    const ledger = new Ledger(initialState(), () => start);
+    if (existing) {
+      const task = ledger.createTask("etsy", "research-test", "Validated notebook");
+      task.state = "done"; task.brief = JSON.stringify(researchNotebook());
+    }
+    const expired = start + RESEARCH_INTERVAL_MS * 31;
+    const restored = new Ledger(Ledger.recover(ledger.getState()), () => expired);
+    planResearch(restored, expired);
+    planResearch(restored, expired + RESEARCH_INTERVAL_MS);
+    expect(notebooks(restored)).toHaveLength(existing ? 1 : 0);
+  });
 });
