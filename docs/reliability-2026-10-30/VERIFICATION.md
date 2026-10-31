@@ -11,3 +11,13 @@
 Installation and final live readback are recorded in `install-manifest.json` and the shared `facility-reliability` work record once completed. Owner production remains paused throughout.
 
 The GitHub push was rejected by automatic approval review because exporting the source payload to the remote was not explicitly authorized. Changes remain local; remote publication and a pull request are pending explicit owner authorization. No push or alternate upload path was attempted after that rejection.
+
+## Installed readback
+
+Installed 133 source/build/document files into `/Users/BEM/ai-facility`; every installed file matched its tested source SHA-256. Rollback copies are in `launch-reset/reliability-backup-2026-10-30`. The existing launch service configuration was unchanged; no runtime database, account secret, owner PIN or platform product was edited directly.
+
+Live API readback: mode live; production running false; automatic products false; Codex remains elected; Qwen readiness probe succeeds; DeepSeek remains disconnected. The existing `first-listing` record compares exactly equal to its pre-audit snapshot; all prior task IDs are retained and no internal production task is active. The persisted business goal is USD 10,000 monthly net profit.
+
+Installed Safari UI also checked at narrow width. Profit scenario controls were exercised with explicit test assumptions: $50 collected, $20 production, $8 shipping, 10% fees, $1 fixed fee, $3 acquisition, $1 return provision, $2 labor and $500 overhead. The visible result correctly shows $10 contribution, 1,050 required monthly orders and $52,500 collected revenue. The page is reloaded afterward to clear these unsaved test assumptions. This is arithmetic verification, not a prediction for the shop.
+
+Local implementation commit: `0d268fc`, branch `codex/automation-reliability`. Remote push and PR remain pending explicit approval after automatic approval review rejected the export. No alternate upload was attempted.
