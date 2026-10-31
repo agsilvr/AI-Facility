@@ -1,4 +1,11 @@
+> Current reliability and operating status: [audit](docs/reliability-2026-10-30/AUDIT.md) · [product-to-profit plan](docs/reliability-2026-10-30/OPERATING-PLAN.md). Target: $10,000/month profit after costs; actual profit is unconnected. Production remains paused.
+
 # AI Facility
+
+The owner-requested target is automatic product selection and operation through
+publishing. See [automation status and account-linking checkpoints](docs/AUTOMATION.md)
+for the implemented selection flow and the remaining connection work. The live
+publisher remains disconnected; final per-item approval is still enforced today.
 
 An underground command facility for running AI agents across several businesses. Each
 business is a wing with its own rooms, crew and budget. The first wing is an Etsy shop.
@@ -28,6 +35,11 @@ top bar always says which one is running.
 **Status: Phase 3 (real crew, not yet publishing).** The facility runs as a background
 service on the Mac mini, keeps its data in a local database, and carries on when the browser
 is closed. The real crew drafts products and briefings; nothing reaches Etsy yet.
+
+Publishing is capped at three attempts per rolling 24 hours, at least four hours
+apart, with reservations saved before execution. Failures count; interrupted attempts
+cannot be replayed. See [the Etsy operating standards](docs/ETSY-OPERATING-STANDARDS.md)
+for enforced limits and the remaining requirements before connecting a publisher.
 
 ## Install on the Mac mini
 
@@ -73,3 +85,21 @@ See `CLAUDE.md` for the rules every change must follow.
 The warmer interface fills the left workspace with the branching facility and puts a Command journal, searchable workbench, Research notebook, Crew dossiers and Activity journal on the right. Click a crew member to see their actual assigned model, data access and work. Zoom is smooth and anchored to the pointer.
 
 Claude normally leads writing and briefings. Codex can take command temporarily through the official app connection. Handover retains jobs and approvals, fences late answers, and requires the owner's PIN when requested manually. Research tests can run on Qwen independently. Publishing and accounting remain unconnected. See [the design and handover notes](docs/DESIGN.md).
+
+Scout also prepares a standalone research notebook every 24 hours while the facility is
+running, independently of the three-product approval backlog. Saved tasks preserve the
+schedule across restarts. An unfinished or failed notebook blocks the next automatic run;
+failures still require your retry. You can request a notebook sooner in Research.
+
+Notebook research analyzes the saved, dated public evidence pack locally. It makes no
+requests to Etsy and does not collect fresh competitor prices or market data. Reports
+retain their source dates and limitations. New Etsy data collection requires Etsy-approved
+access, subject to its permissions and limits; no scraping or detection evasion is used.
+
+## Shared live operation
+
+The facility records work performed in official AI chats and tools as well as its server workers. Room indicators, shared work cards, crew assignments and Jobs counts read the same persisted ledger. A live external worker has a 90-second heartbeat lease; lost connections and restarts become blocked handoffs, with saved context retained and late results fenced out. Queued work is not counted as running. Real percentage completion is shown only when reported; live model calls no longer invent progress from elapsed time.
+
+Use [the work bridge](docs/FACILITY-WORK.md) for every outside operation. It is a reporting and continuity connection, not automatic observation of an arbitrary AI application and not permission to publish. DeepSeek's separate app can be available while the facility reader remains unconnected; the System panel states that distinction. The first product's paused redesign, actual Printify ID, prior feedback and next step are saved in shared work ID `first-listing`. Its supporting evidence and handoff files ship under `docs/launch-2026-10-30/`.
+
+Read [the owner's design manual](docs/DESIGN-QUALITY.md) before the next design or quality review. Old artwork remains superseded; this facility update does not resume that product or authorize publication.

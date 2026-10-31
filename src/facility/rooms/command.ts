@@ -1,4 +1,5 @@
 import { P, rect, text, textWidth } from "../pixels";
+import { commandScreen } from "../status";
 import { blink, block, chair, deskScreen, ellipse, glow, hazard, plant, screen, shadow, tiles, type RoomArt, type Spaces } from "./kit";
 
 // The Command Center: the heart of the facility and the biggest room. A
@@ -178,13 +179,10 @@ export const command: RoomArt = {
     rect(ctx, sc.x, sc.y, sc.w, sc.h, P.screen);
     // Left of the screen: what's waiting for the owner.
     const third = Math.floor(sc.w / 3);
-    if (f.pending) {
-      text(ctx, "NEEDS YOU", sc.x + 4, sc.y + 2, blink(f.time, 4) ? P.red : P.orange);
-      text(ctx, `${f.pending} TO APPROVE`, sc.x + 4, sc.y + 10, P.white);
-    } else {
-      text(ctx, "ALL CLEAR", sc.x + 4, sc.y + 2, P.green);
-      text(ctx, "NOTHING WAITS", sc.x + 4, sc.y + 10, P.grey);
-    }
+    const status = commandScreen(f.state);
+    const color = status.tone === "blocked" ? P.red : ["review", "paused", "waiting"].includes(status.tone) ? P.yellow : P.green;
+    text(ctx, status.headline, sc.x + 4, sc.y + 2, color);
+    text(ctx, status.detail, sc.x + 4, sc.y + 10, P.white);
     rect(ctx, sc.x + third, sc.y + 2, 1, sc.h - 4, "#1c3550");
     // Middle: each crew member's colour and how far through their task they are.
     const crew = f.state.agents;

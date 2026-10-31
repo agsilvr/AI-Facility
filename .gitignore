@@ -8,3 +8,5 @@ build
 data
 logs
 .claude/settings.local.json
+
+.facility-work/

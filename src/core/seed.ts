@@ -15,7 +15,7 @@ export const wings: Wing[] = [
       {
         id: "briefing",
         label: "Daily briefing",
-        stages: [{ id: "brief", label: "Compile briefing", roomId: "command", job: "brief", data: "shop" }],
+        stages: [{ id: "brief", label: "Compile briefing", roomId: "command", executor: "code" }],
       },
     ],
   },
@@ -25,6 +25,12 @@ export const wings: Wing[] = [
     color: "#b38c56",
     budgetMonthly: 30,
     workflows: [
+      { id: "artwork-pilot", label: "Research to artwork review", stages: [
+        { id: "research", label: "Select a research direction", roomId: "etsy-lab", job: "research", data: "shop" },
+        { id: "design", label: "Generate original artwork", roomId: "etsy-studio", job: "design", data: "shop", executor: "code" },
+        { id: "quality", label: "Review artwork quality", roomId: "etsy-qc", executor: "code", needsApproval: true },
+        { id: "accept-artwork", label: "Archive accepted artwork", roomId: "dock", action: "internal.acceptArtwork" },
+      ] },
       { id: "research-test", label: "Research notebook", stages: [
         { id: "research-test", label: "Review public evidence", roomId: "etsy-lab", job: "research", data: "public" },
       ] },
@@ -67,7 +73,7 @@ export const rooms: Room[] = [
   { id: "etsy-lab", wingId: "etsy", name: "Research Lab", kind: "lab" },
   { id: "etsy-studio", wingId: "etsy", name: "Design Studio", kind: "studio" },
   { id: "etsy-qc", wingId: "etsy", name: "Quality Control", kind: "qc" },
-  { id: "etsy-factory", wingId: "etsy", name: "Publishing", kind: "factory", theme: "prints" },
+  { id: "etsy-factory", wingId: "etsy", name: "Product & Listing", kind: "factory", theme: "prints" },
   { id: "etsy-comms", wingId: "etsy", name: "Customer Care", kind: "comms" },
   { id: "expansion-1", wingId: "expansion", name: "Sealed", kind: "sealed" },
 ];
@@ -87,7 +93,7 @@ function agent(
 }
 
 export const agents: Agent[] = [
-  agent("warden", "Warden", "Briefing writer", "briefing", "core", ["brief"], "command", "#7d9974", "#e0f2fe"),
+  agent("warden", "Warden", "Status reporter · code", "briefing", "core", ["brief"], "command", "#7d9974", "#e0f2fe"),
   agent("scout", "Scout", "Trend researcher", "research", "etsy", ["research", "research-test"], "etsy-lab", "#72945b", "#d8e7b9"),
   agent("muse", "Muse", "Product designer", "design", "etsy", ["design"], "etsy-studio", "#9e87a1", "#f3e8ff"),
   agent("muse-2", "Pixel", "Product designer", "design", "etsy", ["design"], "etsy-studio", "#b795a5", "#fae8ff"),
@@ -96,21 +102,24 @@ export const agents: Agent[] = [
   agent("pip", "Pip", "Artwork file checker", "quality", "etsy", ["quality"], "etsy-qc", "#78a3a0", "#d6ebd9"),
   agent("relay", "Relay", "Approved publishing · code", "publish", "etsy", ["publish"], "dock", "#7da49c", "#ccfbf1"),
   agent("post", "Post", "Approved delivery · code", "send", "etsy", ["send"], "etsy-comms", "#8c9b8e", "#e2e8f0"),
+  agent("keeper", "Keeper", "Accepted artwork archive · code", "artworkArchive", "etsy", ["accept-artwork"], "dock", "#8c9b8e", "#e2e8f0"),
 ];
 
 export function initialState(): FacilityState {
   return {
+    businessGoal: { monthlyNetProfitUsd: 10000, currency: "USD" },
     wings,
     rooms,
     agents: agents.map((a) => ({ ...a, skills: [...a.skills], sprite: { ...a.sprite } })),
     tasks: [],
     approvals: [],
     log: [
-      { id: "log-boot", at: Date.now(), wingId: null, level: "success", text: "Facility online. All crew reporting for duty." },
+      { id: "log-boot", at: Date.now(), wingId: null, level: "success", text: "Facility initialized. Connections must be verified before work runs." },
     ],
     spend: { core: 0, etsy: 0, expansion: 0 },
     modelSpend: {},
     spendMonth: monthKey(Date.now()),
     completed: {},
+    etsyPublishAttempts: [],
   };
 }

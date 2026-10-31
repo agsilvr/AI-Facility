@@ -17,6 +17,7 @@ import { buildLayout, layoutKey, TILE } from "./layout";
 import { placeWalker, step, type Walker } from "./movement";
 import { drawFacility, earthPattern, hitTest, paintBackground } from "./render";
 import type { Selection } from "./status";
+import { visibleAgents } from "../core/operations";
 import { targetFor } from "./targets";
 import { Icon } from "../ui/Icon";
 
@@ -27,6 +28,8 @@ interface Props {
   ledger: FacilityPort;
   selection: Selection | null;
   onSelect: (selection: Selection | null) => void;
+  running?: boolean;
+  connected?: boolean;
 }
 
 const CLICK_SLOP_PX = 5;
@@ -38,7 +41,9 @@ interface Flight {
   t: number;
 }
 
-export function FacilityView({ ledger, selection, onSelect }: Props) {
+export function FacilityView({ ledger, selection, onSelect, running = true, connected = true }: Props) {
+  const liveView = useRef({ running, connected });
+  liveView.current = { running, connected };
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef(selection);
@@ -125,7 +130,8 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
     const loop = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      const state = ledger.getState();
+      const raw = ledger.getState();
+      const state = { ...raw, agents: visibleAgents(raw).map((agent) => !liveView.current.connected && agent.status === "working" ? { ...agent, status: "waiting" as const } : agent) };
 
       for (const agent of state.agents) {
         const target = targetFor(state, layout, agent.id);
@@ -207,6 +213,8 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
           selection: selectionRef.current,
           hovered: hoveredRef.current,
           time: now / 1000,
+          running: liveView.current.running,
+          connected: liveView.current.connected,
         },
         background,
       );
@@ -379,7 +387,7 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
       : selection?.kind === "agent"
         ? (initial.agents.find((a) => a.id === selection.id)?.roomId ?? "")
         : "";
-  const working = initial.agents.filter((a) => a.status === "working").length;
+  const working = connected ? visibleAgents(initial).filter((a) => a.status === "working").length : 0;
   return (
     <div className="facility-view">
       <div className="map-toolbar">
@@ -484,7 +492,7 @@ export function FacilityView({ ledger, selection, onSelect }: Props) {
       <div className="map-status">
         <span>{tip ?? "Drag to pan · scroll to zoom · select to inspect"}</span>
         <span>
-          {working} / {initial.agents.length} working
+          {connected ? `${working} / ${initial.agents.length} working · live ledger` : "Offline · last saved state"}
         </span>
       </div>
     </div>

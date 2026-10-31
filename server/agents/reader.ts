@@ -274,7 +274,7 @@ async function readWithQwen(req: ReaderRequest, inputFlags: Flag[], ollama: Olla
 }
 
 /** Is Ollama answering on this Mac with Qwen downloaded? Used to keep research waiting, not failing, until it is. */
-export async function qwenReady(get: (url: string) => Promise<Response> = (url) => fetch(url, { signal: AbortSignal.timeout(5000) })) {
+export async function qwenReady(get: (url: string) => Promise<Response> = (url) => fetch(url, { redirect: "error", signal: AbortSignal.timeout(5000) })) {
   try {
     const res = await get(`${OLLAMA_URL}/api/tags`);
     if (!res.ok) return false;
@@ -289,6 +289,8 @@ const defaultOllama: OllamaClient = async (path, body, timeoutMs) => {
   try {
     const res = await fetch(`${OLLAMA_URL}${path}`, {
       method: "POST",
+      // A local service must never redirect research text to an external site.
+      redirect: "error",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
@@ -319,6 +321,7 @@ function tryParse(value: unknown) {
  */
 export function validate(value: unknown, schema: Record<string, unknown>, path = "output"): string | null {
   const type = schema.type;
+  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return `${path} is not an allowed choice`;
   if (type === "object") {
     if (!value || typeof value !== "object" || Array.isArray(value)) return `${path} must be an object`;
     const obj = value as Record<string, unknown>;
@@ -340,12 +343,15 @@ export function validate(value: unknown, schema: Record<string, unknown>, path =
   }
   if (type === "string") {
     if (typeof value !== "string") return `${path} must be text`;
+    if (typeof schema.minLength === "number" && value.length < schema.minLength) return `${path} is too short`;
     if (typeof schema.maxLength === "number" && value.length > schema.maxLength) return `${path} is too long`;
     return null;
   }
   if (type === "number") return typeof value === "number" && Number.isFinite(value) ? null : `${path} must be a number`;
+  if (type === "integer") return typeof value === "number" && Number.isSafeInteger(value) ? null : `${path} must be an integer`;
   if (type === "array") {
     if (!Array.isArray(value)) return `${path} must be a list`;
+    if (typeof schema.minItems === "number" && value.length < schema.minItems) return `${path} has too few items`;
     if (typeof schema.maxItems === "number" && value.length > schema.maxItems) return `${path} has too many items`;
     const items = schema.items as Record<string, unknown> | undefined;
     if (items) {

@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { FacilityState } from "../src/core/types";
+import type { FacilityState, QueueArchive } from "../src/core/types";
 import type { AuditEntry } from "./agents/reader";
 
 /**
@@ -51,6 +51,11 @@ export class Store {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS queue_archives (
+        id TEXT PRIMARY KEY,
+        at INTEGER NOT NULL,
+        archive TEXT NOT NULL
+      );
     `);
   }
 
@@ -70,6 +75,27 @@ export class Store {
     try {
       upsert.run(Date.now(), JSON.stringify(state));
       for (const e of state.log) addHistory.run(e.id, e.at, e.wingId, e.level, e.text);
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  queueArchive(id: string): QueueArchive | null {
+    const row = this.db.prepare("SELECT archive FROM queue_archives WHERE id = ?").get(id) as { archive: string } | undefined;
+    return row ? JSON.parse(row.archive) as QueueArchive : null;
+  }
+
+  /** The archive, empty queue and disabled legacy product generator commit together. */
+  saveQueueReset(archive: QueueArchive, state: FacilityState) {
+    this.db.exec("BEGIN");
+    try {
+      this.db.prepare("INSERT INTO queue_archives (id, at, archive) VALUES (?, ?, ?)")
+        .run(archive.id, archive.at, JSON.stringify(archive));
+      this.db.prepare("INSERT INTO snapshot (id, saved_at, state) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET saved_at = excluded.saved_at, state = excluded.state")
+        .run(Date.now(), JSON.stringify(state));
+      this.db.prepare("INSERT INTO settings (key, value) VALUES ('automatic_products', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
       this.db.exec("COMMIT");
     } catch (err) {
       this.db.exec("ROLLBACK");

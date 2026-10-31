@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { APPROVAL_TTL_MS } from "../core/ledger";
 import { MODELS } from "../core/models";
+import { RESEARCH_SOURCES } from "../core/research";
 import type { Approval, Draft, FacilityState, Task } from "../core/types";
 import type { RemoteFacility } from "../client/remote";
 import { money, stageLabel, timeAgo } from "./format";
 import { Icon } from "./Icon";
+import { WorkBoard } from "./WorkBoard";
 import {
   failureSummary,
   jobCategory,
   JOB_CATEGORIES,
   taskState,
   taskTone,
+  operationCategory,
   type JobFilter,
 } from "./presentation";
 
@@ -70,12 +73,14 @@ export function Jobs({
         t.title.toLowerCase().includes(query.toLowerCase().trim()) &&
         (filter === "all" || jobCategory(state, t) === filter),
     );
+  const shared = (state.operations ?? []).filter((op) => (filter === "all" || operationCategory(op, now) === filter) && `${op.title} ${op.summary} ${op.context} ${op.references.join(" ")}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const shown = tasks.length + shared.length;
   return (
     <>
       <div className="page-heading">
         <h2>Jobs</h2>
         <span className="muted">
-          {tasks.length} {filter === "all" && !query ? "total" : "shown"}
+          {shown} {filter === "all" && !query ? "total" : "shown"}
         </span>
       </div>
       <label className="search-field">
@@ -108,15 +113,16 @@ export function Jobs({
             <option key={category.id} value={category.id}>
               {category.label} (
               {category.id === "all"
-                ? state.tasks.length
+                ? state.tasks.length + (state.operations?.length ?? 0)
                 : state.tasks.filter(
                     (t) => jobCategory(state, t) === category.id,
-                  ).length}
+                  ).length + (state.operations ?? []).filter((op) => operationCategory(op, now) === category.id).length}
               )
             </option>
           ))}
         </select>
       </label>
+      <WorkBoard state={state} now={now} connected={ledger.connection === "online"} query={query} filter={filter}/>
       {!pinSet && (
         <p className="notice">
           Set up your owner PIN before reviewing work. Open the installer’s
@@ -165,7 +171,7 @@ export function Jobs({
           </section>
         );
       })}
-      {!tasks.length && (
+      {!shown && (
         <div className="empty-state">
           <Icon name="work" size={25} />
           <h3>
@@ -178,6 +184,7 @@ export function Jobs({
                   blocked: "No blocked jobs",
                   active: "No jobs in progress",
                   waiting: "No jobs waiting",
+                  paused: "No paused jobs",
                   done: "No completed jobs",
                 }[filter]}
           </h3>
@@ -257,6 +264,12 @@ export function JobDetail({
         </div>
       )}
       {task.waiting && <p className="notice">{task.waiting}</p>}
+      {task.workflowId === "artwork-pilot" && <ResearchTrail brief={task.brief} />}
+      {task.artworkRequest && !task.artwork && <section className="draft">
+        <h3>Artwork brief ready</h3>
+        <p>The product direction has been selected. This job is waiting for its generated image through the Codex handoff.</p>
+        <details className="disclosure"><summary>Creative brief · version {task.artworkRequest.revision}</summary><p className="artwork-prompt">{task.artworkRequest.prompt}</p></details>
+      </section>}
       <dl className="facts">
         <div>
           <dt>Model{task.state === "done" ? " used" : ""}</dt>
@@ -272,7 +285,7 @@ export function JobDetail({
           </dd>
         </div>
       </dl>
-      {approval?.content && <DraftPreview content={approval.content} />}
+      {approval?.content ? <DraftPreview content={approval.content} /> : task.draft?.kind === "artwork" && <DraftPreview content={JSON.stringify(task.draft)} />}
       {approval && (
         <ApprovalActions
           approval={approval}
@@ -348,6 +361,8 @@ export function ApprovalActions({
   now: number;
   retryModel?: string | null;
 }) {
+  const [feedback, setFeedback] = useState("");
+  const artwork = approval.content ? (() => { try { return JSON.parse(approval.content).kind === "artwork"; } catch { return false; } })() : false;
   const stale = now - approval.createdAt > APPROVAL_TTL_MS;
   const blocked = approval.flags.some((f) => f.level === "block");
   return (
@@ -391,14 +406,17 @@ export function ApprovalActions({
               onClick={() => ledger.decide(approval.id, true)}
             >
               <Icon name="check" size={16} />
-              Approve package
+              {artwork ? "Accept artwork" : "Approve package"}
             </button>
-            <button onClick={() => ledger.decide(approval.id, false)}>
+            <button onClick={() => ledger.decide(approval.id, false, artwork ? feedback : undefined)}>
               Request revision
             </button>
           </>
         )}
       </div>
+      {artwork && approval.kind !== "failure" && <label className="revision-field">What should change?
+        <textarea value={feedback} maxLength={1000} placeholder="Describe any changes to composition, colors, details or overall style." onChange={(e) => setFeedback(e.target.value)} />
+      </label>}
       <p className="micro">
         Owner PIN required.{" "}
         {approval.kind === "failure"
@@ -408,6 +426,22 @@ export function ApprovalActions({
     </>
   );
 }
+function ResearchTrail({ brief }: { brief?: string }) {
+  let idea;
+  try { idea = JSON.parse(brief ?? "null"); } catch { return null; }
+  if (!idea || typeof idea.idea !== "string") return null;
+  const selection = idea.selection;
+  const sources = RESEARCH_SOURCES.filter((s) => Array.isArray(selection?.sourceIds) && selection.sourceIds.includes(s.id));
+  return <details className="disclosure" open>
+    <summary>Research behind this artwork</summary>
+    <p>{idea.idea}</p>
+    {typeof selection?.candidateTitle === "string" && <p><strong>Automatically selected:</strong> {selection.candidateTitle}</p>}
+    {typeof selection?.reason === "string" && <p>{selection.reason}</p>}
+    <div className="source-links">{sources.map((s) => <a key={s.id} href={s.url} target="_blank" rel="noreferrer">{s.title} ↗</a>)}</div>
+    <p className="micro">A concept based on saved public evidence. Current sales, competitor prices and supplier costs have not been checked.</p>
+  </details>;
+}
+
 function DraftPreview({ content }: { content: string }) {
   let draft: Draft;
   try {
@@ -415,7 +449,21 @@ function DraftPreview({ content }: { content: string }) {
   } catch {
     return <pre className="draft">{content}</pre>;
   }
-  return draft.kind === "listing" ? (
+  return draft.kind === "artwork" ? (
+    <section className="draft artwork-review">
+      <span className="eyebrow">ARTWORK QUALITY REVIEW · VERSION {draft.revision}</span>
+      <a href={`/api/designs/${draft.design}`} target="_blank" rel="noreferrer"><img className="artwork-full" src={`/api/designs/${draft.design}`} alt={`Artwork for ${draft.title}`} /></a>
+      <h3>{draft.title}</h3>
+      <p>{draft.width} × {draft.height} pixels · PNG · <a href={`/api/designs/${draft.design}`} target="_blank" rel="noreferrer">Open full image ↗</a></p>
+      <p>Check composition, subject details, unwanted marks, colors and whether you would want this in your shop.</p>
+      {draft.inspection ? <div className="notice">
+        <p>Pixel inspection: {draft.inspection.transparentPixels.toLocaleString()} fully transparent · {draft.inspection.semiTransparentPixels.toLocaleString()} partly transparent.</p>
+        {draft.inspection.visibleBounds && <p>Visible artwork: {draft.inspection.visibleBounds.width} × {draft.inspection.visibleBounds.height} pixels. At an example 300 PPI: {(draft.inspection.visibleBounds.width / 300).toFixed(1)} × {(draft.inspection.visibleBounds.height / 300).toFixed(1)} inches. This does not verify source sharpness or supplier suitability.</p>}
+      </div> : <p className="notice">Alpha and visible bounds have not been recorded for this historical image.</p>}
+      <p className="micro">Concept image. Exact product dimensions, placement, variant contrast and supplier mockups still need checking. Accepting archives this image; nothing is published.</p>
+      <details className="disclosure"><summary>Creative brief and image fingerprint</summary><p className="artwork-prompt">{draft.prompt}</p><code className="artwork-hash">{draft.design}</code></details>
+    </section>
+  ) : draft.kind === "listing" ? (
     <section className="draft">
       <span className="eyebrow">PACKAGE FOR REVIEW</span>
       {draft.design && (
@@ -426,7 +474,7 @@ function DraftPreview({ content }: { content: string }) {
         />
       )}
       <h3>{draft.title}</h3>
-      <strong>{money(draft.priceUsd)}</strong>
+      <strong>{draft.priceUsd === null ? "Price unverified" : money(draft.priceUsd)}</strong>
       <p>{draft.description}</p>
       <div className="tag-list">
         {draft.tags.map((t, i) => (

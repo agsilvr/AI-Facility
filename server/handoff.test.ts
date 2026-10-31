@@ -29,9 +29,15 @@ afterEach(() => {
   for (const dir of dirs.splice(0))
     rmSync(dir, { recursive: true, force: true });
 });
+function writingTask(ledger: Ledger) {
+  const task = ledger.createTask("etsy", "listing", "Writing handoff");
+  task.stageIndex = 3;
+  task.brief = JSON.stringify({ title: task.title, idea: "Original illustration", keywords: [], phrase: "" });
+  return task;
+}
 const answer = (summary: string, costUsd = 0): ReaderResult => ({
   ok: true,
-  output: { summary },
+  output: { title: "Original reader print", description: summary + " Designed with AI assistance.", tags: ["reader print"] },
   inputFlags: [],
   costUsd,
 });
@@ -45,22 +51,20 @@ it("fences an outgoing answer after Codex takes command, and rejects a stale han
   const worker = crew(ledger, async (model) =>
     model === "claude" ? old : answer("Codex finished this briefing."),
   );
+  const task = writingTask(ledger);
   worker.tick(1);
   await settle();
-  const task = ledger
-    .getState()
-    .tasks.find((t) => t.workflowId === "briefing")!;
   const oldToken = ledger.task(task.id)!.runToken;
   expect(ledger.handoff("codex", 0, "test handover")).toBe(true);
   expect(ledger.handoff("claude", 0, "stale browser")).toBe(false);
   worker.tick(1);
   await settle();
-  expect(ledger.task(task.id)?.state).toBe("done");
+  expect(ledger.task(task.id)?.state).toBe("awaiting_approval");
   release(answer("STALE CLAUDE ANSWER", 0.5));
   await settle();
   const result = ledger.task(task.id)!;
-  expect(result.notes.join()).toContain("Codex finished");
-  expect(result.notes.join()).not.toContain("STALE");
+  expect(JSON.stringify(result.draft)).toContain("Codex finished");
+  expect(JSON.stringify(result.draft)).not.toContain("STALE");
   expect(result.runToken).not.toBe(oldToken);
   expect(ledger.getState().modelSpend.claude).toBe(0.5);
   expect(ledger.operator().active).toBe("codex");
@@ -80,6 +84,7 @@ it("automatically hands leadership to Codex once when Claude cannot complete a s
         }
       : answer("Recovered through Codex");
   });
+  writingTask(ledger);
   worker.tick(1);
   await settle();
   expect(ledger.operator()).toMatchObject({ active: "codex", generation: 1 });
@@ -87,9 +92,9 @@ it("automatically hands leadership to Codex once when Claude cannot complete a s
   await settle();
   expect(called).toEqual(["claude", "codex"]);
   expect(
-    ledger.getState().tasks.find((t) => t.workflowId === "briefing")?.state,
-  ).toBe("done");
-  expect(ledger.getState().spend.core).toBe(0.25);
+    ledger.getState().tasks.find((t) => t.workflowId === "listing")?.state,
+  ).toBe("awaiting_approval");
+  expect(ledger.getState().spend.etsy).toBe(0.25);
 });
 
 it("pausing fences an in-flight answer until work is explicitly resumed", async () => {
@@ -101,10 +106,8 @@ it("pausing fences an in-flight answer until work is explicitly resumed", async 
   const facility = new Facility(store, (ledger) =>
     crew(ledger, async () => pending),
   );
+  const task = writingTask(facility.ledger);
   facility.tick();
-  const task = facility.ledger
-    .getState()
-    .tasks.find((t) => t.workflowId === "briefing")!;
   facility.setControl({ running: false });
   release(answer("Late answer"));
   await settle();

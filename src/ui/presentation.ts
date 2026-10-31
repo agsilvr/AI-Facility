@@ -5,12 +5,16 @@ import type {
   OperatorId,
   Task,
 } from "../core/types";
+import { operationModel, workStatus, type WorkOperation } from "../core/operations";
 export function agentModel(state: FacilityState, agent: Agent): ModelId | null {
+  const external = operationModel(state, agent.id);
+  if (external) return external;
   const task = state.tasks.find((t) => t.id === agent.taskId);
   if (task?.model) return task.model;
   if (agent.skills.some((s) => s.startsWith("research"))) return "qwen";
   if (agent.skills.includes("design")) return "typeset";
-  if (agent.skills.some((s) => ["brief", "list", "reply"].includes(s)))
+  if (agent.skills.includes("brief")) return null;
+  if (agent.skills.some((s) => ["list", "reply"].includes(s)))
     return state.operator?.active ?? "claude";
   return null;
 }
@@ -28,10 +32,15 @@ export const JOB_CATEGORIES = [
   { id: "blocked", label: "Blocked" },
   { id: "active", label: "In progress" },
   { id: "waiting", label: "Waiting" },
+  { id: "paused", label: "Paused" },
   { id: "done", label: "Done" },
 ] as const;
 export type JobFilter = (typeof JOB_CATEGORIES)[number]["id"];
 export type JobCategory = Exclude<(typeof JOB_CATEGORIES)[number]["id"], "all">;
+export function operationCategory(work: WorkOperation, now = Date.now()): JobCategory {
+  const status = workStatus(work, now);
+  return status === "running" ? "active" : status === "paused" ? "paused" : status === "done" ? "done" : status === "blocked" ? "blocked" : "waiting";
+}
 export function jobCategory(state: FacilityState, task: Task): JobCategory {
   if (task.state === "done") return "done";
   if (task.state === "active") return "active";
@@ -46,7 +55,7 @@ export function jobCategory(state: FacilityState, task: Task): JobCategory {
   )
     return "login";
   if (pending?.kind === "failure") return "blocked";
-  return task.waiting ? "waiting" : "active";
+  return "waiting";
 }
 export function taskTone(state: FacilityState, task: Task) {
   const category = jobCategory(state, task);
@@ -100,6 +109,7 @@ export function failureSummary(
   };
 }
 export function taskState(state: FacilityState, task: Task) {
+  if (task.state === "queued" && !task.waiting && !state.approvals.some((a) => a.taskId === task.id && a.status === "pending")) return "Queued";
   const category = jobCategory(state, task);
   if (category === "active")
     return task.state === "active" ? "Running" : "Queued";
@@ -115,7 +125,7 @@ export const ROOM_DESCRIPTIONS: Record<string, string> = {
   "etsy-lab":
     "Explore product directions with Qwen and trace each recommendation to its source.",
   "etsy-studio":
-    "Create and revise artwork. Local typography is connected; the image-generation handoff comes next.",
+    "Create and revise artwork through the Codex image handoff. Open Lab to start a research-to-artwork pilot.",
   "etsy-qc":
     "Check artwork file integrity before listing preparation. Supplier print checks and your creative review are still required.",
   "etsy-factory":

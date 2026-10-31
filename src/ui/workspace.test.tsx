@@ -119,7 +119,9 @@ describe("Focused workspace", () => {
       "Approval (0)",
       "Login needed (0)",
       "Blocked (0)",
-      "Waiting (0)",
+      "Waiting (1)",
+      "In progress (0)",
+      "Paused (0)",
       "Done (0)",
     ])
       expect(html).toContain(label);
@@ -127,6 +129,19 @@ describe("Focused workspace", () => {
   });
 });
 describe("Review and recovery", () => {
+  it("shows the actual artwork and distinguishes creative acceptance from publishing", () => {
+    const ledger = new Ledger(initialState());
+    const task = ledger.createTask("etsy", "artwork-pilot", "Illustrated pilot");
+    task.state = "awaiting_approval";
+    task.stageIndex = 2;
+    task.draft = { kind: "artwork", title: task.title, design: "a".repeat(64), width: 1024, height: 1536, prompt: "A winter forest", revision: 1 };
+    ledger.getState().approvals.push({ id: "art", taskId: task.id, wingId: "etsy", summary: "Review", flags: [], status: "pending", createdAt: 0, content: JSON.stringify(task.draft) });
+    const html = renderToStaticMarkup(<JobDetail task={task} state={ledger.getState()} ledger={remote} now={1} onBack={noop} onResearch={noop} />);
+    expect(html).toContain(`/api/designs/${"a".repeat(64)}`);
+    expect(html).toContain("Accept artwork");
+    expect(html).toContain("What should change?");
+    expect(html).toContain("nothing is published");
+  });
   const approval: Approval = {
     id: "a",
     taskId: "t",
@@ -160,7 +175,8 @@ describe("Review and recovery", () => {
   });
   it("offers retry with the elected operator and no approve button for failures", () => {
     const ledger = new Ledger(initialState());
-    const task = ledger.createTask("core", "briefing", "Daily briefing");
+    const task = ledger.createTask("etsy", "listing", "Listing writer");
+    task.stageIndex = 3;
     const state = ledger.getState();
     state.operator = {
       active: "codex",

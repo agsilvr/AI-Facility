@@ -1,0 +1,206 @@
+{
+  "testedAt": "2026-10-31T01:45:00.999Z",
+  "model": "qwen3.5:9b",
+  "durationMs": 18790,
+  "purpose": "One bounded maintenance validation; not a production notebook, design or permission to publish",
+  "audit": [
+    {
+      "at": 1793411100998,
+      "purpose": "public-research-test",
+      "source": "saved dated public evidence and previous public research directions",
+      "inputSha256": "4f079289df0e1725113c97a75105d8d59868cd9aac384d16d7d23c69483ea0b3",
+      "outputSha256": "6a394abf0e6e3d8dc1490af7be5737611dd1d2e8415f085ac2ef549cdb243414",
+      "ok": true,
+      "error": null,
+      "costUsd": 0,
+      "flags": []
+    }
+  ],
+  "result": {
+    "ok": true,
+    "output": {
+      "opportunities": [
+        {
+          "family": "reader-print",
+          "title": "Reader Gallery Print",
+          "audience": "Book lovers seeking wall art for reading nooks or libraries",
+          "concept": "A bold, original composition featuring a stylized cat-librarian motif integrated with abstract book spines and typographic elements, designed specifically as a framed print rather than a sweatshirt. The visual style avoids generic whimsy, focusing on a cohesive gallery aesthetic suitable for home decor.",
+          "sourceIds": [
+            "etsy-gallery-trend",
+            "printify-posters"
+          ],
+          "keyword": "reader gallery print"
+        },
+        {
+          "family": "pet-ornament",
+          "title": "Personalized Pet Ornament",
+          "audience": "Pet owners looking for holiday gifts or keepsakes featuring their specific animal",
+          "concept": "A watercolor-style portrait of a pet with the owner's name and pet's name integrated into the artwork. The design must adhere to small-area print guidelines, using bold lines and high-contrast text to ensure clarity on ceramic surfaces.",
+          "sourceIds": [
+            "etsy-pet-ornament-item",
+            "printify-ornament-guide"
+          ],
+          "keyword": "personalized pet ornament"
+        },
+        {
+          "family": "bookish-crewneck",
+          "title": "Nonpersonalized Bookish Cat Crewneck",
+          "audience": "Book enthusiasts looking for casual apparel with literary or animal themes",
+          "concept": "A DTG printed crewneck featuring a stylized cat-librarian illustration paired with abstract book motifs. The design is nonpersonalized, focusing on a consistent graphic style suitable for broad appeal without requiring per-order customization.",
+          "sourceIds": [
+            "etsy-book-cat-item",
+            "printify-crewneck"
+          ],
+          "keyword": "bookish cat crewneck"
+        }
+      ]
+    },
+    "inputFlags": [],
+    "costUsd": 0
+  },
+  "evidenceProblem": null,
+  "report": {
+    "kind": "research-report",
+    "evidenceVersion": 2,
+    "summary": "Three product hypotheses from saved evidence. Their ranking is a model suggestion, not measured demand or profitability.",
+    "opportunities": [
+      {
+        "family": "reader-print",
+        "title": "Reader Gallery Print",
+        "audience": "Book lovers seeking wall art for reading nooks or libraries",
+        "concept": "A bold, original composition featuring a stylized cat-librarian motif integrated with abstract book spines and typographic elements, designed specifically as a framed print rather than a sweatshirt. The visual style avoids generic whimsy, focusing on a cohesive gallery aesthetic suitable for home decor.",
+        "sourceIds": [
+          "etsy-gallery-trend",
+          "printify-posters"
+        ],
+        "keyword": "reader gallery print",
+        "evidence": "Etsy · Spring and Summer 2026 trend report — Data as of 2026-02-10; recent three months versus prior year; published 2026-03-17. Gallery prints +80% and wall-art decor +110% are broad category search signals. They do not establish current demand for reader-specific illustrations or profitable prints. No exact product search volume, item sales or conversion is supplied.\n\nPrintify · Custom posters — Saved general product-family information; no selected supplier quote. Print-on-demand framed and unframed posters are feasible product families. This page establishes supply only, not demand, shipping cost, variant margin or a reason to prefer wall art over other products.",
+        "nextStep": "Check 'reader gallery print' in Marketplace Insights for searches, listings and displayed period. Obtain a dated account quote for the exact poster, provider, paper, size and framing variant with shipping to the chosen destination. Subtract actual platform/payment/listing fees, applicable ads, returns and labor. Starting prices are not selected-variant quotes."
+      },
+      {
+        "family": "pet-ornament",
+        "title": "Personalized Pet Ornament",
+        "audience": "Pet owners looking for holiday gifts or keepsakes featuring their specific animal",
+        "concept": "A watercolor-style portrait of a pet with the owner's name and pet's name integrated into the artwork. The design must adhere to small-area print guidelines, using bold lines and high-contrast text to ensure clarity on ceramic surfaces.",
+        "sourceIds": [
+          "etsy-pet-ornament-item",
+          "printify-ornament-guide"
+        ],
+        "keyword": "personalized pet ornament",
+        "evidence": "Etsy · Personalized pet watercolor ornament, ModPawsUS — Retrieved public page snapshot; visible review examples from 2025 and January 2026. Six item reviews, 4.7 item rating. Photo/name customization requires per-order artwork and proofs. Shop sales are not item sales. No current item sales volume or profit is available; snapshot may be cached/localized.\n\nPrintify · Ceramic ornament design guidelines — Guidance retrieved 2026-10-30; selected product template still required. Small print area needs bold text/lines and safe-area placement. Tiny details and pale gradients risk poor reproduction. Guidance is production feasibility evidence, not buyer demand or an exact template.",
+        "nextStep": "Check 'personalized pet ornament' in Marketplace Insights for searches, listings and displayed period. Obtain a dated account quote for the exact ceramic ornament, provider and template; include per-order artwork/proof labor with shipping to the chosen destination. Subtract actual platform/payment/listing fees, applicable ads, returns and labor. Starting prices are not selected-variant quotes."
+      },
+      {
+        "family": "bookish-crewneck",
+        "title": "Nonpersonalized Bookish Cat Crewneck",
+        "audience": "Book enthusiasts looking for casual apparel with literary or animal themes",
+        "concept": "A DTG printed crewneck featuring a stylized cat-librarian illustration paired with abstract book motifs. The design is nonpersonalized, focusing on a consistent graphic style suitable for broad appeal without requiring per-order customization.",
+        "sourceIds": [
+          "etsy-book-cat-item",
+          "printify-crewneck"
+        ],
+        "keyword": "bookish cat crewneck",
+        "evidence": "Etsy · Book-cat embroidered sweatshirt, FurFamilyStudio — Retrieved public page snapshot; one review dated 2026-01-17. One item review, 5.0 rating. Gift purchase evidence only; a tiny sample. Embroidery differs from a DTG printed product. Shop totals and offer prices cannot establish this item's sales, conversion or profitability. Snapshot may be cached/localized.\n\nPrintify · Gildan 18000 crewneck catalog — Public starting-price snapshot; actual selected account quote unavailable. US Printify Choice DTG catalog starts at USD 17.87 plus shipping from USD 7.39. These are starting estimates, not a selected variant/provider quote or verified contribution. Account prices, destination, print area and availability must be checked before preparing a listing.",
+        "nextStep": "Check 'bookish cat crewneck' in Marketplace Insights for searches, listings and displayed period. Obtain a dated account quote for Gildan 18000, exact provider, DTG front, US size M with shipping to the chosen destination. Subtract actual platform/payment/listing fees, applicable ads, returns and labor. Starting prices are not selected-variant quotes."
+      }
+    ],
+    "limitations": [
+      "Analysis of saved evidence only; no live Etsy or competitor data was collected.",
+      "Concepts and suggested keywords are model proposals, not verified market facts.",
+      "Exact-product demand, supplier variant quotes, shipping, fees and margins remain unverified.",
+      "Asset provenance and commercial rights require a separate review; a generated proposal does not establish them."
+    ],
+    "sources": [
+      {
+        "id": "etsy-seasonal",
+        "title": "Etsy · Fall and Winter 2026 trend report",
+        "url": "https://www.etsy.com/seller-handbook/article/1521255894814",
+        "checkedAt": "2026-10-30",
+        "role": "demand",
+        "evidenceType": "marketplace-category-trend",
+        "period": "Data as of 2026-09-14; recent three months versus prior year; published 2026-10-14",
+        "notes": "Pet gifting searches doubled; pet ornaments +22%; personalized friend gifts +1,400%. Category/search signals, not proposed-product sales. US signed-in activity limitations apply. No exact keyword volumes or competition counts supplied."
+      },
+      {
+        "id": "etsy-book-history",
+        "title": "Etsy · Spring and Summer 2025 trend report",
+        "url": "https://www.etsy.com/seller-handbook/article/1362959156542",
+        "checkedAt": "2026-10-30",
+        "role": "demand",
+        "evidenceType": "historical-marketplace-trend",
+        "period": "Spring/Summer 2025 report; historical context, not current 2026 volume",
+        "notes": "Book-related purchases and book-club interest were documented. This covers multiple product types; it does not validate current demand for a new cat sweatshirt."
+      },
+      {
+        "id": "etsy-book-club-item",
+        "title": "Etsy · Custom book club sweatshirt, TheLibraryCloset",
+        "url": "https://www.etsy.com/listing/1597490306/custom-book-club-sweatshirt-personalized",
+        "checkedAt": "2026-10-30",
+        "role": "item-observation",
+        "evidenceType": "adjacent-item-reviews",
+        "period": "Retrieved public page snapshot; visible review examples from 2025",
+        "notes": "51 item reviews, 4.9 item rating. About 45,000 displayed sales belongs to the entire shop, not this listing. Reviews show adjacent purchases, not exact item unit sales, monthly sales or demand for our new design. Snapshot may be cached/localized."
+      },
+      {
+        "id": "etsy-book-cat-item",
+        "title": "Etsy · Book-cat embroidered sweatshirt, FurFamilyStudio",
+        "url": "https://www.etsy.com/listing/1770495962/cute-book-cat-embroidered-sweatshirt",
+        "checkedAt": "2026-10-30",
+        "role": "item-observation",
+        "evidenceType": "adjacent-item-review",
+        "period": "Retrieved public page snapshot; one review dated 2026-01-17",
+        "notes": "One item review, 5.0 rating. Gift purchase evidence only; a tiny sample. Embroidery differs from a DTG printed product. Shop totals and offer prices cannot establish this item's sales, conversion or profitability. Snapshot may be cached/localized."
+      },
+      {
+        "id": "etsy-pet-ornament-item",
+        "title": "Etsy · Personalized pet watercolor ornament, ModPawsUS",
+        "url": "https://www.etsy.com/listing/4385389807/personalized-pet-watercolor-ornament",
+        "checkedAt": "2026-10-30",
+        "role": "item-observation",
+        "evidenceType": "adjacent-item-reviews",
+        "period": "Retrieved public page snapshot; visible review examples from 2025 and January 2026",
+        "notes": "Six item reviews, 4.7 item rating. Photo/name customization requires per-order artwork and proofs. Shop sales are not item sales. No current item sales volume or profit is available; snapshot may be cached/localized."
+      },
+      {
+        "id": "printify-crewneck",
+        "title": "Printify · Gildan 18000 crewneck catalog",
+        "url": "https://printify.com/app/products/49/gildan/unisex-heavy-blend-crewneck-sweatshirt",
+        "checkedAt": "2026-10-30",
+        "role": "supplier-capability",
+        "evidenceType": "public-supplier-catalog",
+        "period": "Public starting-price snapshot; actual selected account quote unavailable",
+        "notes": "US Printify Choice DTG catalog starts at USD 17.87 plus shipping from USD 7.39. These are starting estimates, not a selected variant/provider quote or verified contribution. Account prices, destination, print area and availability must be checked before preparing a listing."
+      },
+      {
+        "id": "printify-ornament-guide",
+        "title": "Printify · Ceramic ornament design guidelines",
+        "url": "https://help.printify.com/hc/en-us/articles/4483628673681-What-are-the-design-guidelines-for-ceramic-ornaments",
+        "checkedAt": "2026-10-30",
+        "role": "supplier-capability",
+        "evidenceType": "production-guidance",
+        "period": "Guidance retrieved 2026-10-30; selected product template still required",
+        "notes": "Small print area needs bold text/lines and safe-area placement. Tiny details and pale gradients risk poor reproduction. Guidance is production feasibility evidence, not buyer demand or an exact template."
+      },
+      {
+        "id": "etsy-gallery-trend",
+        "title": "Etsy · Spring and Summer 2026 trend report",
+        "url": "https://www.etsy.com/seller-handbook/article/1473931456647",
+        "checkedAt": "2026-10-30",
+        "role": "demand",
+        "evidenceType": "marketplace-category-trend",
+        "period": "Data as of 2026-02-10; recent three months versus prior year; published 2026-03-17",
+        "notes": "Gallery prints +80% and wall-art decor +110% are broad category search signals. They do not establish current demand for reader-specific illustrations or profitable prints. No exact product search volume, item sales or conversion is supplied."
+      },
+      {
+        "id": "printify-posters",
+        "title": "Printify · Custom posters",
+        "url": "https://printify.com/custom-posters/",
+        "checkedAt": "2026-10-30",
+        "role": "supplier-capability",
+        "evidenceType": "public-supplier-catalog",
+        "period": "Saved general product-family information; no selected supplier quote",
+        "notes": "Print-on-demand framed and unframed posters are feasible product families. This page establishes supply only, not demand, shipping cost, variant margin or a reason to prefer wall art over other products."
+      }
+    ]
+  }
+}

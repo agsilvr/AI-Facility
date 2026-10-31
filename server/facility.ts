@@ -12,6 +12,7 @@ const TICK_MS = 200;
 /** Whoever does the work: the demo simulation, or the real crew. */
 export interface Crew {
   tick(dt: number): void;
+  checkHealth?(): void;
   setPaused?(paused: boolean): void;
 }
 const SAVE_EVERY_MS = 2000;
@@ -57,7 +58,7 @@ export class Facility {
       const index = stages?.findIndex((s) => s.id === oldStage) ?? -1;
       return index >= 0 ? { ...task, stageIndex: index } : task;
     });
-    this.ledger = new Ledger(recovered ? { ...recovered, wings, rooms, agents, tasks: tasks! } : configured);
+    this.ledger = new Ledger(recovered ? { ...recovered, businessGoal: recovered.businessGoal ?? configured.businessGoal, wings, rooms, agents, tasks: tasks! } : configured);
     this.crew = realCrew ? realCrew(this.ledger) : new DemoSimulation(this.ledger);
     this.control = { running: true, speed: 1, mode: realCrew ? "live" : "demo" };
     this.owner = new OwnerGate(store);
@@ -65,8 +66,16 @@ export class Facility {
     // stopped the facility, it stays stopped until they start it again.
     if (store.getSetting("paused") === "true") this.control = { ...this.control, running: false };
     this.crew.setPaused?.(!this.control.running);
+    let savedAttempts = this.ledger.getState().etsyPublishAttempts;
     this.ledger.subscribe(() => {
       this.dirty = true;
+      const attempts = this.ledger.getState().etsyPublishAttempts;
+      if (attempts !== savedAttempts) {
+        // Publishing cannot start until its reservation is durable. If SQLite
+        // fails, propagate the error; no actor is assigned and no call runs.
+        this.save();
+        savedAttempts = attempts;
+      }
     });
     this.dirty = true;
   }
@@ -82,6 +91,8 @@ export class Facility {
   }
 
   tick(dt = TICK_MS / 1000) {
+    this.ledger.expireOperations();
+    this.crew.checkHealth?.();
     // Speed only makes sense for the demo; real models take the time they take.
     if (this.control.running) this.crew.tick(this.control.mode === "demo" ? dt * this.control.speed : dt);
     if (this.dirty && Date.now() - this.lastSave >= SAVE_EVERY_MS) this.save();
@@ -94,9 +105,10 @@ export class Facility {
     this.lastSave = Date.now();
   }
 
-  getControl = () => this.control;
+  getControl = () => ({ ...this.control, automaticProducts: this.control.mode === "live" && this.store.getSetting("automatic_products") === "true" });
 
   setControl(patch: Partial<Control>) {
+    if (patch.running === false) this.ledger.stopOperations("Owner paused the facility. Saved handoff retained.");
     const next = { ...this.control };
     if (typeof patch.running === "boolean") next.running = patch.running;
     if (typeof patch.speed === "number" && SPEEDS.includes(patch.speed)) next.speed = patch.speed;
@@ -119,5 +131,18 @@ export class Facility {
     const ok = this.ledger.handoff(active, expectedGeneration, "Owner requested a handover.");
     if (ok) this.save();
     return ok;
+  }
+
+  /** Explicit, recoverable housekeeping; this never approves, resumes or publishes. */
+  resetQueue(id: string, reason: string) {
+    const prior = this.store.queueArchive(id);
+    if (prior) return { archive: prior, alreadyApplied: true };
+    const archive = this.ledger.resetQueue(id, reason, (record, next) => this.store.saveQueueReset(record, next));
+    this.save();
+    return { archive, alreadyApplied: false };
+  }
+
+  queueArchive(id: string) {
+    return this.store.queueArchive(id);
   }
 }

@@ -1,6 +1,7 @@
 import type { FacilityState } from "../core/types";
 import { OwnerBadge, type Owner } from "./OwnerLock";
 import { Icon } from "./Icon";
+import { workAlive } from "../core/operations";
 interface Props {
   state: FacilityState;
   running: boolean;
@@ -26,6 +27,7 @@ export function TopBar({
   onWork,
 }: Props) {
   const pending = state.approvals.filter((a) => a.status === "pending").length;
+  const maintenance = state.operations?.some((op) => op.phase === "maintenance" && workAlive(op, now));
   return (
     <header className="topbar">
       <div className="brand">
@@ -44,7 +46,7 @@ export function TopBar({
               : "Demo · paused"
             : running
               ? "Live"
-              : "Paused"}
+              : maintenance ? "Production paused · maintenance active" : "Paused"}
       </span>
       <div className="controls">
         {pending > 0 && (

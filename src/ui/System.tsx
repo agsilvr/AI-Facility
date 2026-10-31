@@ -3,6 +3,7 @@ import { MODELS } from "../core/models";
 import type { FacilityState, ModelId } from "../core/types";
 import { Icon } from "./Icon";
 import { money, timeAgo } from "./format";
+import { modelConnection } from "../core/health";
 
 export function System({
   state,
@@ -57,15 +58,10 @@ export function System({
                 <span
                   className={`badge ${state.unavailable?.includes(id) ? "amber" : ""}`}
                 >
-                  {state.unavailable?.includes(id)
-                    ? "Unavailable"
-                    : state.tasks.some(
-                          (t) => t.model === id && t.state === "active",
-                        )
-                      ? "In use"
-                      : "Standby"}
+                  {modelConnection(state, id, now, connected)}
                 </span>
               </summary>
+              {id === "deepseek" && state.unavailable?.includes(id) && <p className="micro">The DeepSeek app can be available separately. No verified DeepSeek reader is connected to this facility.</p>}
               <p className="micro">
                 Allowed model data:{" "}
                 {MODELS[id].sees
@@ -82,13 +78,12 @@ export function System({
             </details>
           ))}
           <p className="micro">
-            Standby means enabled in the router. It does not confirm sign-in or
-            available credits.
+            Model configuration does not confirm sign-in or credits. Readiness is shown only when checked; official chat work needs a live heartbeat.
           </p>
           <div className="connection-row">
             <div>
               <strong>Etsy / Printify</strong>
-              <small>Listing drafts remain local</small>
+              <small>Publishing adapter unavailable · app/chat drafts appear in Shared work</small>
             </div>
             <span className="badge">Not connected</span>
           </div>

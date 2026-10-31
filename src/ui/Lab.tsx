@@ -1,4 +1,4 @@
-import { readResearch, RESEARCH_SOURCES } from "../core/research";
+import { readResearch, RESEARCH_SOURCES, currentResearch } from "../core/research";
 import type { FacilityState } from "../core/types";
 import type { RemoteFacility } from "../client/remote";
 import { Icon } from "./Icon";
@@ -20,6 +20,7 @@ export function Lab({
   const open = tasks.find((t) => t.state !== "done");
   const reportTask = [...tasks].reverse().find((t) => readResearch(t.brief));
   const report = readResearch(reportTask?.brief);
+  const pilot = [...state.tasks].reverse().find((t) => t.workflowId === "artwork-pilot");
   return (
     <>
       <div className="page-heading">
@@ -28,8 +29,19 @@ export function Lab({
       </div>
       <p className="section-intro">
         Explore product directions from saved public evidence. Scout prepares a
-        notebook every 24 hours while the facility is running.
+        notebook when the evidence pack changes, at most once per 24 hours. Repeating a saved pack is not fresh market research.
       </p>
+      <section className="artwork-pilot">
+        <div className="subheading"><h3>Research → artwork review</h3><span className="badge sage">Human quality check</span></div>
+        <p>Qwen selects a direction automatically. Codex generates the artwork through the image handoff, then you review the exact image before anything continues.</p>
+        <div className="card-actions">
+          <button className="primary" disabled={!live || !running || (!!pilot && pilot.state !== "done")} onClick={() => ledger.runArtworkPilot()}>
+            Start artwork pilot <Icon name="arrow" size={15} />
+          </button>
+          {pilot && <button onClick={() => onJobs(pilot.id)}>Open artwork job <Icon name="arrow" size={15} /></button>}
+        </div>
+        <p className="micro">No Claude or DeepSeek needed. Acceptance saves the artwork locally; it does not publish a product.</p>
+      </section>
       <button
         className="primary"
         disabled={!live || !running || !!open}
@@ -79,6 +91,7 @@ export function Lab({
               })}
             </time>
           </div>
+          {!currentResearch(report) && <p className="notice">Historical notebook · not eligible for new production. Revalidate it against the current evidence contract.</p>}
           <p>{report.summary}</p>
           <div className="opportunity-list">
             {report.opportunities.map((o, i) => (
@@ -94,8 +107,8 @@ export function Lab({
                   <Icon name="chevron" size={15} />
                 </summary>
                 <div className="detail-content">
-                  <p>{o.concept}</p>
-                  <h4>Evidence</h4>
+                  <p><strong>Proposed concept: </strong>{o.concept}</p>
+                  <h4>{report.evidenceVersion === 2 ? "Saved source observations" : "Historical model interpretation · unverified"}</h4>
                   <p>{o.evidence}</p>
                   <div className="source-links">
                     {o.sourceIds.map((id) => {

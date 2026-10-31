@@ -14,6 +14,9 @@ import { Jobs } from "./Jobs";
 import type { JobFilter } from "./presentation";
 import { Lab } from "./Lab";
 import { System } from "./System";
+import { Readiness } from "./Readiness";
+import { WorkBoard } from "./WorkBoard";
+import { operationForAgent, visibleAgents, workAlive, workStatus } from "../core/operations";
 
 export type WorkspaceTab =
   | "command"
@@ -66,6 +69,7 @@ export function Sidebar({
   selection,
   onSelect,
 }: Props) {
+  state = { ...state, agents: visibleAgents(state, now) };
   const body = useRef<HTMLDivElement>(null);
   const previousSelection = useRef<Selection | null>(null);
   const previousTab = useRef(tab);
@@ -220,14 +224,14 @@ function Command({
   const operator = state.operator?.active ?? "claude";
   const stopped = state.tasks.filter(
     (t) => jobCategory(state, t) === "blocked",
-  ).length;
+  ).length + (state.operations ?? []).filter((op) => workStatus(op, now) === "blocked").length;
   const logins = state.tasks.filter(
     (t) => jobCategory(state, t) === "login",
   ).length;
   const reviews = state.approvals.filter(
     (a) => a.status === "pending" && a.kind !== "failure",
   ).length;
-  const working = state.tasks.filter((t) => t.state === "active").length;
+  const working = ledger.connection !== "online" ? 0 : state.tasks.filter((t) => t.state === "active").length + (state.operations ?? []).filter((op) => workAlive(op, now)).length;
   const notebook = [...state.tasks]
     .reverse()
     .find((t) => readResearch(t.brief));
@@ -250,6 +254,8 @@ function Command({
           {operator === "codex" ? "Temporary" : "Primary"}
         </span>
       </section>
+      <Readiness state={state} now={now} control={ledger.getControl()} connected={ledger.connection === "online"} onResearch={() => onTab("research")} onJobs={() => onJobs("all")} />
+      <WorkBoard state={state} now={now} connected={ledger.connection === "online"}/>
       <div className="summary-grid">
         <button className="metric" onClick={() => onJobs("active")}>
           <strong>{working}</strong>
@@ -338,8 +344,8 @@ function Command({
         <summary>Operator & handover</summary>
         <p>
           {operator === "codex"
-            ? "Codex is temporarily handling writing and briefings. Claude can take command again through the same shared queue."
-            : "Claude handles writing and briefings. Codex takes command when Claude is unavailable."}
+            ? "Codex is temporarily handling writing. Claude can take command again through the same shared queue."
+            : "Claude handles writing. Codex takes command when Claude is unavailable."}
         </p>
         <p className="micro">
           Handovers keep jobs, saved work and approvals. Previous operator
@@ -463,6 +469,7 @@ export function Inspector({
   onSelect?: (s: Selection) => void;
   onJobSelect?: (id: string) => void;
 }) {
+  state = { ...state, agents: visibleAgents(state) };
   const agent =
     selection.kind === "agent"
       ? state.agents.find((a) => a.id === selection.id)
@@ -483,6 +490,7 @@ export function Inspector({
     );
   const model = agent ? agentModel(state, agent) : null;
   const task = state.tasks.find((t) => t.id === agent?.taskId);
+  const operation = agent ? operationForAgent(state, agent.id) : undefined;
   const here = state.agents.filter((a) => a.roomId === room?.id);
   const access = agent
     ? [
@@ -554,9 +562,9 @@ export function Inspector({
           </dl>
           <div className="assignment">
             <span className="eyebrow">ASSIGNMENT</span>
-            <h3>{task?.title ?? "No active assignment"}</h3>
+            <h3>{operation?.title ?? task?.title ?? "No active assignment"}</h3>
             <p>
-              {task ? stageLabel(state, task) : "Waiting for a matching job."}
+              {operation?.summary ?? (task ? stageLabel(state, task) : "Waiting for a matching job.")}
             </p>
             {task && (
               <button
@@ -567,6 +575,7 @@ export function Inspector({
               </button>
             )}
           </div>
+          <WorkBoard state={state} now={Date.now()} agentId={agent.id} connected={!ledger || ledger.connection === "online"}/>
           {ledger && (
             <button
               onClick={() =>
@@ -600,6 +609,7 @@ export function Inspector({
           <p className="section-intro">
             {ROOM_DESCRIPTIONS[room!.id] ?? "Reserved for a future business."}
           </p>
+          <WorkBoard state={state} now={Date.now()} roomId={room!.id} connected={!ledger || ledger.connection === "online"}/>
           {room?.kind !== "sealed" && onTab && (
             <button onClick={() => onTab(roomTab)}>
               Open {WORKSPACE_TABS.find((t) => t.id === roomTab)?.label}{" "}

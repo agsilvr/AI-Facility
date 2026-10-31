@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type AuditEntry, fenceUntrusted, OLLAMA_URL, type OllamaClient, QWEN_TAG, qwenReady, qwenRequest, readerArgs, readerEnv, runReader, type Spawner, validate } from "./reader";
 
 const SCHEMA = {
@@ -80,6 +80,12 @@ describe("fenceUntrusted", () => {
 });
 
 describe("validate", () => {
+  it("validates integer candidate choices and nonempty selection reasons", () => {
+    expect(validate(0, { type: "integer", enum: [0, 2] })).toBeNull();
+    expect(validate(1, { type: "integer", enum: [0, 2] })).toContain("allowed choice");
+    expect(validate(0.5, { type: "integer" })).toContain("integer");
+    expect(validate("", { type: "string", minLength: 1 })).toContain("too short");
+  });
   it("accepts matching output", () => {
     expect(validate({ message: "hi" }, SCHEMA)).toBeNull();
   });
@@ -239,6 +245,25 @@ describe("qwenReady", () => {
     expect(await qwenReady(tags(["llama3:8b"]))).toBe(false);
     expect(await qwenReady(async () => new Response("", { status: 500 }))).toBe(false);
     expect(await qwenReady(async () => Promise.reject(new Error("ECONNREFUSED")))).toBe(false);
+  });
+
+  it("keeps readiness checks and reader requests on loopback without following redirects", async () => {
+    const get = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      throw new TypeError("Redirect refused");
+    });
+    try {
+      expect(await qwenReady()).toBe(false);
+      const result = await runReader({ ...REQ, model: "qwen" });
+      expect(result.ok).toBe(false);
+      expect(get).toHaveBeenCalledTimes(2);
+      expect(get.mock.calls[0][0]).toBe(`${OLLAMA_URL}/api/tags`);
+      expect(get.mock.calls[1][0]).toBe(`${OLLAMA_URL}/api/chat`);
+      for (const [, options] of get.mock.calls) expect(options?.redirect).toBe("error");
+      const body = JSON.parse(get.mock.calls[1][1]!.body as string);
+      expect(body.tools).toBeUndefined();
+    } finally {
+      get.mockRestore();
+    }
   });
 });
 

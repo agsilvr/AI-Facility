@@ -27,12 +27,18 @@ A Claude failure transfers leadership once to Codex. Existing stopped tasks stil
 
 New QC and agent configurations restore authority from code. Saved jobs migrate by stage identity when the QC stage is inserted, preserving existing drafts and approvals.
 
-## Research test
+## Daily research notebooks
 
-The Research notebook can run one bounded local Qwen job against two dated public sources. The result is a saved report with three opportunities, evidence references, next validation steps and limitations. It is a standalone workflow: it does not chain to Claude or publish anything. Repeated requests reuse an unfinished test rather than creating duplicate jobs.
+The Research notebook runs one bounded local Qwen job every 24 hours against two dated public sources, independently of the product approval backlog. The result is a saved report with three opportunities, evidence references, next validation steps and limitations. It is a standalone workflow: it does not chain to Claude or publish anything. Saved notebook creation times preserve the schedule across restarts, including manually requested runs. Unfinished or failed notebooks block new automatic runs; no missed-run backlog is replayed. The facility kill switch and Scout's pause still hold. Recent public report titles are passed as untrusted data to discourage repeated directions without exposing private shop plans.
 
 The public evidence pack contains [Etsy's Fall/Winter 2026 report](https://www.etsy.com/seller-handbook/article/1521255894814) and [Printify's general poster information](https://printify.com/custom-posters/), checked October 30. Qwen analyzes these saved notes; it does not independently browse. Competitor prices, supplier variant costs, shipping and margins still need verification. Future retrieval should remain a controlled, read-only component rather than giving drafting models arbitrary tools.
 
 ## Boundaries
 
 Image-generation handoff, supplier-specific print checks, real publishing, and accounting connections remain future work and are labeled accordingly. QC currently verifies the saved artwork file's existence and expected SVG format/dimensions; it is not a creative or supplier-readiness certification. Your creative approval remains required before outward actions.
+
+## Shared work synchronization update
+
+External official-app/chat work now has persisted operation claims in the same ledger. The map's studio and other workstations, room status strip, Command counters, searchable Jobs, crew dossier and context/history cards all derive from those claims. Claims reserve a workstation, expire after a lost heartbeat, survive restart as interrupted handoffs, and reject a previous worker's result after reassignment. Completed phases leave visible receipts; paused and blocked work are distinguished from idle work. Offline views stop presenting saved activity as live.
+
+`docs/FACILITY-WORK.md` defines the required reporting protocol for Codex and Claude. The bridge cannot automatically see an unconnected AI session. A separate DeepSeek app is not a verified facility reader. Local research now uses nine dated sources with explicit evidence roles; the earlier two-source description above is historical. Current design checks and saved owner feedback are in `docs/DESIGN-QUALITY.md`. The design prompt no longer assumes all products are opaque wall posters.

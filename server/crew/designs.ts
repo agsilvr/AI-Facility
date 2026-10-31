@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ArtworkAsset, ArtworkInspection } from "../../src/core/types";
+import { inspectPng } from "./png";
 
 // Designs the crew make, kept as files in the facility's data folder. The
 // type-only designer lives here too: when Codex isn't free, a product still
@@ -31,6 +33,28 @@ export class Designs {
     if (!ID.test(id)) return null;
     const file = this.path(id);
     return existsSync(file) ? readFileSync(file, "utf8") : null;
+  }
+
+  savePng(bytes: Buffer): ArtworkAsset {
+    const dimensions = inspectPng(bytes);
+    if (!dimensions.inspection.visibleBounds) throw new Error("Artwork is entirely transparent; provide visible artwork.");
+    const id = createHash("sha256").update(bytes).digest("hex");
+    const file = join(this.dir, `${id}.png`);
+    if (!existsSync(file)) writeFileSync(file, bytes, { mode: 0o600, flag: "wx" });
+    else if (createHash("sha256").update(readFileSync(file)).digest("hex") !== id) throw new Error("Stored artwork fingerprint does not match.");
+    return { id, ...dimensions, mime: "image/png" };
+  }
+
+  asset(id: string): { bytes: Buffer; mime: "image/png" | "image/svg+xml"; width?: number; height?: number; inspection?: ArtworkInspection } | null {
+    if (/^[0-9a-f]{64}$/.test(id)) {
+      const file = join(this.dir, `${id}.png`);
+      if (!existsSync(file)) return null;
+      const bytes = readFileSync(file);
+      if (createHash("sha256").update(bytes).digest("hex") !== id) return null;
+      return { bytes, mime: "image/png", ...inspectPng(bytes) };
+    }
+    const svg = this.read(id);
+    return svg ? { bytes: Buffer.from(svg), mime: "image/svg+xml" } : null;
   }
 
   private path(id: string) {

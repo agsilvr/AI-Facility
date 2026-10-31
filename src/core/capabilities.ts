@@ -3,7 +3,7 @@ import type { ActionId, Agent, AgentCapability, DataClass, Job, Stage, Wing } fr
 type Capability =
   | { job: Job; data: readonly DataClass[]; purposes: readonly string[] }
   | { action: ActionId }
-  | { code: "quality" };
+  | { code: "quality" | "brief" };
 
 // These are authority, unlike the agent's display name or its stage skills.
 // Drafting and delivery never share a profile. New powers require a code change.
@@ -12,10 +12,11 @@ const CAPABILITIES: Record<AgentCapability, Capability> = {
   design: { job: "design", data: ["public", "shop"], purposes: [] },
   listing: { job: "write", data: ["public", "shop"], purposes: ["etsy-listing"] },
   reply: { job: "write", data: ["customer"], purposes: ["etsy-reply"] },
-  briefing: { job: "brief", data: ["shop"], purposes: ["daily-briefing"] },
+  briefing: { code: "brief" },
   publish: { action: "etsy.publishListing" },
   send: { action: "etsy.sendReply" },
   quality: { code: "quality" },
+  artworkArchive: { action: "internal.acceptArtwork" },
 };
 
 function capabilityOf(agent: Agent): Capability | undefined {
@@ -27,7 +28,7 @@ export function canWorkStage(agent: Agent, wingId: string, stage: Stage): boolea
   if (agent.wingId !== wingId || !agent.skills.includes(stage.id)) return false;
   const capability = capabilityOf(agent);
   if (!capability) return false;
-  if ("code" in capability) return stage.id === capability.code && stage.executor === "code" && !stage.action && !stage.job && !stage.data && !stage.needsApproval;
+  if ("code" in capability) return stage.id === capability.code && stage.executor === "code" && !stage.action && !stage.job && !stage.data;
   if ("action" in capability) {
     return stage.action === capability.action && !stage.job && !stage.data && !stage.needsApproval;
   }

@@ -19,7 +19,7 @@ export function dispatch(ledger: Ledger) {
     const agent = ledger
       .getState()
       .agents.find(
-        (a) => a.status === "idle" && !a.taskId && canWorkStage(a, task.wingId, stage),
+        (a) => a.status === "idle" && !a.taskId && !ledger.operationBusy(a.id) && canWorkStage(a, task.wingId, stage),
       );
     if (agent) ledger.assign(task.id, agent.id);
   }

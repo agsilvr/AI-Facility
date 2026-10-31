@@ -5,7 +5,8 @@ import type { Walker } from "./movement";
 import { crewSprite, frame, hash, P, rect, SPRITE_H, SPRITE_W, tag, text, textWidth } from "./pixels";
 import { animateRoom, paintRoom } from "./rooms";
 import { glow, hazard, plant } from "./rooms/kit";
-import { pendingApprovals, roomNeedsAttention, tasksInRoom, type Selection } from "./status";
+import { pendingApprovals, roomNeedsAttention, roomSignal, tasksInRoom, type Selection } from "./status";
+import { operationForAgent } from "../core/operations";
 
 export type { Selection };
 
@@ -21,6 +22,8 @@ export interface Scene {
   selection: Selection | null;
   hovered: Selection | null;
   time: number;
+  running?: boolean;
+  connected?: boolean;
 }
 
 const WING_FALLBACK = "#94a3b8";
@@ -187,7 +190,7 @@ function paintHall(ctx: CanvasRenderingContext2D, layout: FacilityLayout, state:
       }
       ctx.restore();
     }
-    const route = [["etsy-lab", "01 RESEARCH"], ["etsy-studio", "02 DESIGN"], ["etsy-qc", "03 CHECK"], ["etsy-factory", "04 PUBLISH"], ["dock", "05 OUTBOX"]];
+    const route = [["etsy-lab", "01 RESEARCH"], ["etsy-studio", "02 DESIGN"], ["etsy-qc", "03 CHECK"], ["etsy-factory", "04 LISTING"], ["dock", "05 OUTBOX"]];
     for (const [id, label] of route) {
       const r = layout.rooms.get(id); if (!r) continue;
       const cx = r.door.outside.x;
@@ -284,7 +287,7 @@ export function drawFacility(ctx: CanvasRenderingContext2D, scene: Scene, backgr
     const rl = layout.rooms.get(room.id);
     if (!rl) continue;
     const working = state.agents.filter((a) => a.roomId === room.id && a.status === "working").length;
-    animateRoom(ctx, room, rl, { time, state, busy: tasksInRoom(state, room.id), working, completed, pending }, wingColor(state, room.wingId), state.wings);
+    animateRoom(ctx, room, rl, { time: working ? time : 0, state, busy: tasksInRoom(state, room.id), working, completed, pending }, wingColor(state, room.wingId), state.wings);
   }
 
   // Crew, nearest the viewer drawn last.
@@ -299,6 +302,17 @@ export function drawFacility(ctx: CanvasRenderingContext2D, scene: Scene, backgr
     const rl = layout.rooms.get(room.id);
     if (!rl) continue;
     const r = rl.rect;
+    if (room.kind !== "sealed") {
+      const signal = scene.connected === false ? "paused" : roomSignal(state, room.id, scene.running ?? true);
+      const colors = { running: P.green, blocked: P.red, paused: P.yellow, review: P.orange, waiting: P.yellow, done: P.green, idle: P.stone2 };
+      const labels = { running: "WORKING", blocked: "STOPPED", paused: "PAUSED", review: "REVIEW", waiting: "WAITING", done: "DONE", idle: "IDLE" };
+      tag(ctx, labels[signal], r.x + r.w / 2, r.y + r.h + 4, colors[signal], P.ink);
+      if (signal === "running") {
+        frame(ctx, r.x - 1, r.y - 1, r.w + 2, r.h + 2, colors.running);
+        const gear = Math.floor(time * 3) % 4;
+        for (let i = 0; i < 4; i++) rect(ctx, r.x + 6 + i * 4, r.y + 5, 2, 2, i === gear ? P.white : P.darkGreen);
+      }
+    }
     if (roomNeedsAttention(state, room)) {
       const on = true;
       frame(ctx, r.x - 1, r.y - 1, r.w + 2, r.h + 2, on ? P.red : P.darkRed);
@@ -329,12 +343,14 @@ function drawCrew(ctx: CanvasRenderingContext2D, scene: Scene, agent: Agent, w: 
   // The name at their feet, so it never hides their workstation, and what they're up to over their head.
   tag(ctx, agent.name.toUpperCase(), x, y + 2, selected ? P.yellow : P.white);
   const task = agent.taskId ? state.tasks.find((t) => t.id === agent.taskId) : undefined;
+  const operation = operationForAgent(state, agent.id);
   const top = y - SPRITE_H - 6;
   if (agent.status === "paused") {
     tag(ctx, "II", x, top - 4, P.ink, P.yellow);
-  } else if (agent.status === "working" && task) {
+  } else if (agent.status === "working" && (task || operation)) {
     rect(ctx, x - 9, top, 18, 4, P.ink);
-    rect(ctx, x - 8, top + 1, Math.max(1, Math.round(16 * task.progress)), 2, agent.sprite.suit);
+    if (task?.progress) rect(ctx, x - 8, top + 1, Math.round(16 * task.progress), 2, agent.sprite.suit);
+    else rect(ctx, x - 8 + Math.floor(time * 5) % 13, top + 1, 3, 2, agent.sprite.suit);
   } else if (agent.status === "idle" && !w.moving) {
     const p = (time * 0.6) % 1;
     text(ctx, "z", x + 5, top - Math.round(p * 6), `rgba(200,210,230,${1 - p})`);

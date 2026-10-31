@@ -19,6 +19,8 @@ export class RemoteFacility implements FacilityPort {
   private source: EventSource | null = null;
   connection: Connection = "connecting";
   private version = 0;
+  private lastSignal = 0;
+  private watchdog: ReturnType<typeof setInterval> | null = null;
   commandError: string | null = null;
   /**
    * Called when the server refuses a command until the owner enters their PIN
@@ -30,12 +32,28 @@ export class RemoteFacility implements FacilityPort {
   constructor(private base = "") {}
 
   start() {
+    this.stop();
+    this.connection = this.snapshot ? "offline" : "connecting";
+    this.lastSignal = Date.now();
     this.source = new EventSource(`${this.base}/api/events`);
     this.source.addEventListener("snapshot", (e) => {
+      this.lastSignal = Date.now();
       this.snapshot = JSON.parse((e as MessageEvent).data) as Snapshot;
       this.connection = "online";
       this.emit();
     });
+    this.source.addEventListener("heartbeat", () => {
+      this.lastSignal = Date.now();
+      // A heartbeat alone cannot certify a previously disconnected snapshot.
+      if (this.connection === "offline") this.start();
+    });
+    this.watchdog = setInterval(() => {
+      if (Date.now() - this.lastSignal > 15_000) {
+        this.connection = "offline";
+        this.emit();
+        this.start();
+      }
+    }, 1000);
     // EventSource reconnects by itself; we only report the gap.
     this.source.onerror = () => {
       this.connection = "offline";
@@ -45,6 +63,10 @@ export class RemoteFacility implements FacilityPort {
 
   stop() {
     this.source?.close();
+    this.source = null;
+    if (this.watchdog) clearInterval(this.watchdog);
+    this.watchdog = null;
+    this.connection = "offline";
   }
 
   ready() {
@@ -66,8 +88,8 @@ export class RemoteFacility implements FacilityPort {
     return () => this.listeners.delete(listener);
   };
 
-  decide(approvalId: string, approve: boolean) {
-    void this.post(`/api/approvals/${encodeURIComponent(approvalId)}`, { approve });
+  decide(approvalId: string, approve: boolean, feedback?: string) {
+    void this.post(`/api/approvals/${encodeURIComponent(approvalId)}`, { approve, feedback });
   }
 
   setAgentPaused(agentId: string, paused: boolean) {
@@ -79,6 +101,7 @@ export class RemoteFacility implements FacilityPort {
   }
 
   runResearch() { void this.post("/api/research", {}); }
+  runArtworkPilot() { void this.post("/api/artwork-pilot", {}); }
   setOperator(active: "claude" | "codex", generation: number) { void this.post("/api/operator", { active, generation }); }
   clearError() { this.commandError = null; this.emit(); }
 

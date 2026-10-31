@@ -8,6 +8,7 @@ import { TopBar } from "./ui/TopBar";
 import { Icon } from "./ui/Icon";
 import { useFacility } from "./ui/useFacility";
 import type { JobFilter } from "./ui/presentation";
+import { ProductionFlow } from "./ui/ProductionFlow";
 export function App() {
   const facility = useMemo(() => new RemoteFacility(), []);
   useFacility(facility);
@@ -125,10 +126,13 @@ export function App() {
       )}
       <main className="main" id="workspace">
         <section className="map-panel" aria-label="Live facility map">
+          <ProductionFlow state={state} running={control.running} connected={facility.connection === "online"} now={now} onRoom={(id) => selectMap({ kind: "room", id })}/>
           <FacilityView
             ledger={facility}
             selection={selection}
             onSelect={selectMap}
+            running={control.running && facility.connection === "online"}
+            connected={facility.connection === "online"}
           />
         </section>
         <Sidebar

@@ -70,7 +70,7 @@ export interface OperatorState {
 }
 
 /** Outward actions the facility knows how to perform. */
-export type ActionId = "etsy.publishListing" | "etsy.sendReply" | "internal.fileBriefing";
+export type ActionId = "etsy.publishListing" | "etsy.sendReply" | "internal.fileBriefing" | "internal.acceptArtwork";
 
 export type RoomKind =
   | "command"
@@ -99,7 +99,7 @@ export interface Room {
 export type AgentStatus = "idle" | "working" | "waiting" | "paused";
 
 /** Fixed code-owned permission profiles; model output can never grant one. */
-export type AgentCapability = "research" | "design" | "listing" | "reply" | "briefing" | "publish" | "send" | "quality";
+export type AgentCapability = "research" | "design" | "listing" | "reply" | "briefing" | "publish" | "send" | "quality" | "artworkArchive";
 
 export interface Agent {
   id: AgentId;
@@ -154,6 +154,33 @@ export interface Task {
   waiting?: string;
   /** Fences a single attempt: an answer from a previous operator cannot change this task. */
   runToken?: string;
+  artworkRequest?: { id: string; prompt: string; revision: number };
+  artwork?: ArtworkAsset & { requestId: string };
+  revisionFeedback?: string;
+}
+
+export interface ArtworkInspection {
+  transparentPixels: number; semiTransparentPixels: number; opaquePixels: number;
+  visibleBounds: { x: number; y: number; width: number; height: number } | null;
+}
+
+export interface ArtworkAsset {
+  inspection?: ArtworkInspection;
+  id: string;
+  width: number;
+  height: number;
+  mime: "image/png";
+}
+
+export interface ArtworkDraft {
+  inspection?: ArtworkInspection;
+  kind: "artwork";
+  title: string;
+  design: string;
+  width: number;
+  height: number;
+  prompt: string;
+  revision: number;
 }
 
 export interface ListingDraft {
@@ -161,7 +188,8 @@ export interface ListingDraft {
   title: string;
   description: string;
   tags: string[];
-  priceUsd: number;
+  /** Unknown until exact supplier costs and a pricing decision exist. */
+  priceUsd: number | null;
   /** The design file this listing uses (see server/crew/designs.ts); part of what the owner approves. */
   design?: string;
 }
@@ -171,7 +199,7 @@ export interface ReplyDraft {
   message: string;
 }
 
-export type Draft = ListingDraft | ReplyDraft;
+export type Draft = ListingDraft | ReplyDraft | ArtworkDraft;
 
 /**
  * "block" means the content can't be approved as it stands; it has to be sent
@@ -211,6 +239,11 @@ export interface LogEntry {
 }
 
 export interface FacilityState {
+  businessGoal?: { monthlyNetProfitUsd: number; currency: "USD" };
+  /** Live work performed through official apps/chat, tracked in the same durable ledger. */
+  operations?: import("./operations").WorkOperation[];
+  /** Reserved publishing attempts, retained independently of pruned tasks and monthly budgets. */
+  etsyPublishAttempts?: EtsyPublishAttempt[];
   /** One operator owns new writing and briefing work; persisted with the shared ledger. */
   operator?: OperatorState;
   unavailable?: ModelId[];
@@ -228,4 +261,22 @@ export interface FacilityState {
   spendMonth: string;
   /** Finished tasks ever, keyed "wingId/workflowId". Old finished tasks are pruned from `tasks`. */
   completed: Record<string, number>;
+}
+
+/** Recoverable local work removed from the queue; never a publishing authorization. */
+export interface QueueArchive {
+  operations?: import("./operations").WorkOperation[];
+  id: string;
+  at: number;
+  reason: string;
+  tasks: Task[];
+  approvals: Approval[];
+}
+
+export interface EtsyPublishAttempt {
+  taskId: TaskId;
+  runToken: string;
+  at: number;
+  /** Exact approved shop content, used to prevent duplicate publication. */
+  content: string;
 }

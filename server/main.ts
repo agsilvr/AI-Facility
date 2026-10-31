@@ -31,9 +31,20 @@ const facility = new Facility(
           designs,
           qwenReady: () => qwenReady(),
           shop: () => store.getSetting("shop_brief") ?? "",
+          automaticProducts: () => store.getSetting("automatic_products") === "true",
+          timezone: "America/New_York",
         })
     : undefined,
 );
+// An explicit deployment reset is applied exactly once. It archives unfinished
+// work, preserves account settings and prevents the old placeholder queue refilling.
+if (process.env.FACILITY_RESET_QUEUE_ID) {
+  const reset = facility.resetQueue(process.env.FACILITY_RESET_QUEUE_ID, "Owner requested a fresh launch with new niche research and design.");
+  if (!reset.alreadyApplied) {
+    facility.ledger.createTask("etsy", "research-test", "Fresh niche comparison — launch reset");
+    facility.save();
+  }
+}
 facility.start();
 
 // Until the owner sets an approval PIN, nothing can be approved. The first PIN

@@ -57,7 +57,7 @@ describe("Job recovery categories", () => {
   });
   it("distinguishes queued work, model waiting, and active work", () => {
     const { state, task } = fixture();
-    expect(jobCategory(state, task)).toBe("active");
+    expect(jobCategory(state, task)).toBe("waiting");
     expect(taskState(state, task)).toBe("Queued");
     task.waiting = "Waiting for Qwen: busy";
     expect(jobCategory(state, task)).toBe("waiting");
