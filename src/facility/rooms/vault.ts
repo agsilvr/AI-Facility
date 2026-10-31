@@ -3,7 +3,7 @@ import { blink, block, disc, ellipse, glow, shadow, type RoomArt, type Spaces } 
 
 // The Vault: where finished work is banked. Riveted steel walls with a huge
 // round vault door, a gold-and-marble floor, a counting desk, a wall of
-// deposit boxes, and one gold bar on the stack for every finished task.
+// deposit boxes, and reported model usage, with sales explicitly unconnected.
 
 const GOLD_A = "#3b2f14";
 const GOLD_B = "#48391a";
@@ -16,12 +16,6 @@ function hoard(s: Spaces) {
   return { x0: s.left.x0 + 4, x1: s.left.x1 - 2, base: s.floor.y + s.floor.h - 8 };
 }
 
-function goldBar(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  rect(ctx, x - 1, y - 1, 9, 6, P.darkGold);
-  rect(ctx, x, y, 7, 4, P.gold);
-  rect(ctx, x + 1, y, 5, 1, P.yellow);
-  rect(ctx, x, y + 3, 7, 1, "#b0821c");
-}
 
 export const vault: RoomArt = {
   icon: ["0011100", "0100010", "1001001", "1011101", "1001001", "0100010", "0011100"],
@@ -118,16 +112,11 @@ export const vault: RoomArt = {
   },
 
   animate(ctx, s, f) {
-    // One gold bar for every finished task, stacked in rows.
+    // This is reported model usage, never sales or a pretend balance.
     const h = hoard(s);
-    const perRow = Math.max(1, Math.floor((h.x1 - h.x0) / 9));
-    const shown = Math.min(f.completed, perRow * 5);
-    for (let i = 0; i < shown; i++) {
-      const row = Math.floor(i / perRow);
-      const col = i % perRow;
-      goldBar(ctx, h.x0 + col * 9 + (row % 2) * 4, h.base - row * 5);
-    }
-    tag(ctx, `BANKED ${f.completed}`, (h.x0 + h.x1) / 2, h.base - 5 * 5 - 12, P.yellow);
+    const usage = Object.values(f.state.spend).reduce((sum, value) => sum + value, 0);
+    tag(ctx, `AI USAGE $${usage.toFixed(2)}`, (h.x0 + h.x1) / 2, h.base - 36, P.paper);
+    tag(ctx, "SALES OFFLINE", (h.x0 + h.x1) / 2, h.base - 20, P.grey);
     // The door's wheel turns slowly; the gem catches the light.
     const dx = doorX(s);
     const dy = s.wall.y + 12;

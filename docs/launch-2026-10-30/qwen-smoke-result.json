@@ -1,0 +1,70 @@
+{
+  "testedAt": "2026-10-31T00:17:32.508Z",
+  "model": "qwen3.5:9b",
+  "durationMs": 35299,
+  "evidenceOnly": true,
+  "fineTuned": false,
+  "audit": [
+    {
+      "at": 1793405852508,
+      "purpose": "public-research-test",
+      "source": "saved dated public evidence and previous public research directions",
+      "inputSha256": "4f079289df0e1725113c97a75105d8d59868cd9aac384d16d7d23c69483ea0b3",
+      "outputSha256": "03fc346cb10f4de8da4c61cf4eb54e9cd13a52ab4e98e284a5a6c5f33a0c54fd",
+      "ok": true,
+      "error": null,
+      "costUsd": 0,
+      "flags": []
+    }
+  ],
+  "result": {
+    "ok": true,
+    "output": {
+      "summary": "Three candidate product families were compared based on available demand signals, supplier capabilities, and operational feasibility. The 'personalized pet ornament' is ranked highest due to strong, specific demand signals (double growth in pet gifting) and a clear fulfillment path via Printify's ceramic guidelines, despite the need for per-order customization. The 'nonpersonalized bookish-cat DTG crewneck' is ranked second; while historical book interest exists, current demand for this specific non-personalized design is unproven, and it lacks the seasonal urgency of holiday gifting. The 'reader gallery print' is ranked third; although broad wall art trends are positive, there is no buyer-s",
+      "opportunities": [
+        {
+          "title": "Personalized Pet Watercolor Ornament",
+          "audience": "Pet owners seeking unique, name-customized holiday gifts for their cats or dogs.",
+          "concept": "A watercolor-style ceramic ornament featuring the pet's name and a simple silhouette, leveraging Printify's ceramic production capabilities which require bold lines to avoid detail loss. This aligns with the observed +22% growth in pet ornaments and high interest in personalized friend gifts.",
+          "evidence": "Confidence: moderate. Observed: Pet gifting searches doubled and personalized friend gifts rose 1,400% in recent three months (source: etsy-seasonal, period: Data as of 2026-09-14). Observed: Adjacent item reviews exist for personalized pet ornaments with ratings around 4.7 (source: etsy-pet-ornament-item, period: Retrieved public page snapshot; visible review examples from 2025 and January 2026). Hypothesis: Exact sales volume, conversion rates, and profitability for a new watercolor design are unproven.",
+          "sourceIds": [
+            "etsy-seasonal",
+            "etsy-pet-ornament-item",
+            "printify-ornament-guide"
+          ],
+          "nextStep": "Check 'pet name ornament' searches/listings and period in Marketplace Insights; quote Printify ceramic ornament template with US shipping; subtract Etsy/payment/listing fees and applicable Offsite Ads fees."
+        },
+        {
+          "title": "Nonpersonalized Bookish-Cat DTG Crewneck",
+          "audience": "Book lovers or cat enthusiasts looking for casual, non-personalized apparel.",
+          "concept": "A DTG-printed crewneck featuring a whimsical illustration of a cat reading a book. This relies on the historical context of book-club interest but lacks specific current validation for this exact design combination.",
+          "evidence": "Confidence: low. Observed: Historical reports show book-related purchases and book-club interest in Spring/Summer 2025 (source: etsy-book-history, period: Spring/Summer 2025 report). Observed: One adjacent item review exists for a similar embroidered sweatshirt, but the design method differs (embroidery vs. DTG) and sales volume is unverified (source: etsy-book-cat-item, period: Retrieved public page snapshot; one review dated 2026-01-17). Hypothesis: Current keyword demand for a nonpersonalized book-cat sweatshirt is not validated; competition levels are unknown.",
+          "sourceIds": [
+            "etsy-book-history",
+            "etsy-book-cat-item",
+            "printify-crewneck"
+          ],
+          "nextStep": "Check 'cat reading sweatshirt' searches/listings and period in Marketplace Insights; quote Gildan 18000 in US size M with US shipping; subtract Etsy/payment/listing fees and applicable Offsite Ads fees."
+        },
+        {
+          "title": "Reader Gallery Print",
+          "audience": "Home decor buyers seeking wall art for reading nooks or libraries.",
+          "concept": "A framed or unframed print featuring a composition of books and cats, intended as general wall art rather than personalized items. This leverages broad category growth in gallery prints but lacks specific buyer differentiation.",
+          "evidence": "Confidence: low. Observed: Broad category search signals show gallery prints +80% and wall-art decor +110% (source: etsy-gallery-trend, period: Data as of 2026-02-10). Observed: No specific item reviews or sales data are provided for a reader-specific illustration; only general category trends exist (source: etsy-gallery-trend, period: Data as of 2026-02-10). Hypothesis: Demand for this specific non-personalized print is unproven; profitability and conversion rates are unknown.",
+          "sourceIds": [
+            "etsy-gallery-trend",
+            "printify-posters"
+          ],
+          "nextStep": "Check 'library wall art' searches/listings and period in Marketplace Insights; quote Printify custom poster template with US shipping; subtract Etsy/payment/listing fees and applicable Offsite Ads fees."
+        }
+      ],
+      "limitations": [
+        "No live market data or web access is available to verify current search volumes, exact sales figures, or competitor pricing.",
+        "Supplier quotes are based on public starting estimates (e.g., Printify catalog) and must be individually verified before listing preparation.",
+        "Item reviews demonstrate adjacent purchases only and do not confirm exact unit sales volume for the proposed designs."
+      ]
+    },
+    "inputFlags": [],
+    "costUsd": 0
+  }
+}

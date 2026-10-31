@@ -1,359 +1,654 @@
-import { useState } from "react";
-import { APPROVAL_TTL_MS, completedCount, completedKey } from "../core/ledger";
+import { useEffect, useRef } from "react";
+import { completedCount } from "../core/ledger";
+import { canWorkStage } from "../core/capabilities";
 import { MODELS } from "../core/models";
-import type { FacilityPort } from "../core/port";
-import type { DataClass, Draft, FacilityState, Flag, ModelId } from "../core/types";
+import { readResearch } from "../core/research";
+import type { Agent, FacilityState } from "../core/types";
+import type { RemoteFacility } from "../client/remote";
+import { crewSprite } from "../facility/pixels";
 import type { Selection } from "../facility/status";
-import { money, stageLabel, timeAgo } from "./format";
+import { stageLabel, timeAgo } from "./format";
+import { Icon, type IconName } from "./Icon";
+import { agentModel, jobCategory, ROOM_DESCRIPTIONS } from "./presentation";
+import { Jobs } from "./Jobs";
+import type { JobFilter } from "./presentation";
+import { Lab } from "./Lab";
+import { System } from "./System";
+import { Readiness } from "./Readiness";
+import { WorkBoard } from "./WorkBoard";
+import { operationForAgent, visibleAgents, workAlive, workStatus } from "../core/operations";
 
-type Tab = "attention" | "flow" | "crew" | "log";
-
+export type WorkspaceTab =
+  | "command"
+  | "work"
+  | "research"
+  | "crew"
+  | "activity";
+export const WORKSPACE_TABS: {
+  id: WorkspaceTab;
+  label: string;
+  icon: IconName;
+}[] = [
+  { id: "command", label: "Command", icon: "command" },
+  { id: "work", label: "Jobs", icon: "work" },
+  { id: "research", label: "Lab", icon: "research" },
+  { id: "crew", label: "Crew", icon: "crew" },
+  { id: "activity", label: "System", icon: "settings" },
+];
 interface Props {
-  ledger: FacilityPort;
+  jobFilter: JobFilter;
+  onJobFilter: (filter: JobFilter) => void;
+  onJobs: (filter: JobFilter) => void;
+  jobId: string | null;
+  onJobSelect: (id: string | null) => void;
+  ledger: RemoteFacility;
   state: FacilityState;
   now: number;
-  /** False until the owner has chosen an approval PIN; nothing can be approved before then. */
   pinSet: boolean;
-  /** Real models at work, rather than the demo. */
   live: boolean;
-  onSelect: (s: Selection) => void;
+  running: boolean;
+  tab: WorkspaceTab;
+  onTab: (tab: WorkspaceTab) => void;
+  selection: Selection | null;
+  onSelect: (s: Selection | null) => void;
 }
-
-export function Sidebar({ ledger, state, now, pinSet, live, onSelect }: Props) {
-  const [tab, setTab] = useState<Tab>("attention");
-  const pending = state.approvals.filter((a) => a.status === "pending");
-
+export function Sidebar({
+  jobFilter,
+  onJobFilter,
+  onJobs,
+  jobId,
+  onJobSelect,
+  ledger,
+  state,
+  now,
+  pinSet,
+  live,
+  running,
+  tab,
+  onTab,
+  selection,
+  onSelect,
+}: Props) {
+  state = { ...state, agents: visibleAgents(state, now) };
+  const body = useRef<HTMLDivElement>(null);
+  const previousSelection = useRef<Selection | null>(null);
+  const previousTab = useRef(tab);
+  const chooseTab = (next: WorkspaceTab) => {
+    onSelect(null);
+    onTab(next);
+  };
+  useEffect(() => {
+    body.current?.scrollTo(0, 0);
+    if (selection) document.getElementById("inspector-heading")?.focus();
+    else if (
+      previousSelection.current &&
+      previousTab.current === tab &&
+      document.activeElement?.getAttribute("role") !== "tab"
+    ) {
+      const previous = previousSelection.current;
+      (
+        document.getElementById(`agent-${previous.id}`) ??
+        document.getElementById("room-locator")
+      )?.focus();
+    }
+    previousSelection.current = selection;
+    previousTab.current = tab;
+  }, [tab, selection, jobId]);
   return (
-    <aside className="sidebar">
-      <nav className="tabs" role="tablist">
-        <TabButton id="attention" tab={tab} setTab={setTab} alert={pending.length > 0}>
-          Needs you{pending.length ? ` (${pending.length})` : ""}
-        </TabButton>
-        <TabButton id="flow" tab={tab} setTab={setTab}>Task flow</TabButton>
-        <TabButton id="crew" tab={tab} setTab={setTab}>Crew</TabButton>
-        <TabButton id="log" tab={tab} setTab={setTab}>Log</TabButton>
+    <aside className="sidebar" aria-label="Facility workspace">
+      <nav
+        className="tabs"
+        role="tablist"
+        aria-label="Workspace sections"
+        onKeyDown={(e) => {
+          const index = WORKSPACE_TABS.findIndex((t) => t.id === tab);
+          const next =
+            e.key === "ArrowRight"
+              ? (index + 1) % 5
+              : e.key === "ArrowLeft"
+                ? (index + 4) % 5
+                : e.key === "Home"
+                  ? 0
+                  : e.key === "End"
+                    ? 4
+                    : -1;
+          if (next >= 0) {
+            e.preventDefault();
+            chooseTab(WORKSPACE_TABS[next].id);
+            document.getElementById(`tab-${WORKSPACE_TABS[next].id}`)?.focus();
+          }
+        }}
+      >
+        {WORKSPACE_TABS.map((item, i) => (
+          <button
+            key={item.id}
+            id={`tab-${item.id}`}
+            role="tab"
+            aria-controls={`panel-${item.id}`}
+            aria-selected={tab === item.id}
+            tabIndex={tab === item.id ? 0 : -1}
+            className={`tab ${tab === item.id ? "active" : ""}`}
+            onClick={() => chooseTab(item.id)}
+            title={`${item.label} · Option / Alt ${i + 1}`}
+          >
+            <Icon name={item.icon} size={17} />
+            <span>{item.label}</span>
+          </button>
+        ))}
       </nav>
-      <div className="tab-body">
-        {tab === "attention" && <Attention ledger={ledger} state={state} now={now} pinSet={pinSet} />}
-        {tab === "flow" && <Flow state={state} />}
-        {tab === "crew" && <Crew ledger={ledger} state={state} live={live} onSelect={onSelect} />}
-        {tab === "log" && <Log state={state} now={now} />}
+      <div
+        ref={body}
+        className="tab-body"
+        role="tabpanel"
+        id={`panel-${tab}`}
+        aria-labelledby={`tab-${tab}`}
+        tabIndex={0}
+      >
+        {selection ? (
+          <Inspector
+            state={state}
+            selection={selection}
+            onClose={() => onSelect(null)}
+            ledger={ledger}
+            onTab={chooseTab}
+            onSelect={onSelect}
+            onJobSelect={onJobSelect}
+          />
+        ) : (
+          <>
+            {tab === "command" && (
+              <Command
+                onJobs={onJobs}
+                state={state}
+                ledger={ledger}
+                now={now}
+                onTab={chooseTab}
+                onJobSelect={onJobSelect}
+              />
+            )}
+            {tab === "work" && (
+              <Jobs
+                filter={jobFilter}
+                onFilter={onJobFilter}
+                selected={jobId}
+                onSelect={onJobSelect}
+                state={state}
+                ledger={ledger}
+                now={now}
+                pinSet={pinSet}
+                onResearch={() => chooseTab("research")}
+              />
+            )}
+            {tab === "research" && (
+              <Lab
+                state={state}
+                ledger={ledger}
+                live={live}
+                running={running}
+                onJobs={(id) => onJobSelect(id ?? null)}
+              />
+            )}
+            {tab === "crew" && <Crew state={state} onSelect={onSelect} />}
+            {tab === "activity" && (
+              <System
+                state={state}
+                now={now}
+                connected={ledger.connection === "online"}
+              />
+            )}
+          </>
+        )}
       </div>
+      <footer className="panel-footer">
+        <Icon name="shield" size={13} />
+        <span>Owner approval required for external actions</span>
+      </footer>
     </aside>
   );
 }
-
-function TabButton(props: {
-  id: Tab;
-  tab: Tab;
-  setTab: (t: Tab) => void;
-  alert?: boolean;
-  children: React.ReactNode;
-}) {
-  const active = props.id === props.tab;
-  return (
-    <button
-      role="tab"
-      aria-selected={active}
-      className={`tab ${active ? "active" : ""} ${props.alert ? "alert" : ""}`}
-      onClick={() => props.setTab(props.id)}
-    >
-      {props.children}
-    </button>
-  );
-}
-
-function Attention({ ledger, state, now, pinSet }: { ledger: FacilityPort; state: FacilityState; now: number; pinSet: boolean }) {
-  const pending = state.approvals.filter((a) => a.status === "pending");
-  const noPin = !pinSet && (
-    <p className="pin-needed">
-      Approvals are locked until you choose your approval PIN. The installer opens a page for it; if you closed it,
-      run the installer again.
-    </p>
-  );
-  if (pending.length === 0) {
-    return (
-      <>
-        {noPin}
-        <p className="empty">Nothing needs you right now. Agents will ask here before anything goes out.</p>
-      </>
-    );
-  }
-  return (
-    <ul className="cards">
-      {noPin && <li>{noPin}</li>}
-      {pending.map((a) => {
-        const task = state.tasks.find((t) => t.id === a.taskId);
-        const wing = state.wings.find((w) => w.id === a.wingId);
-        // The ledger refuses approvals older than this, so the button says so before you press it.
-        const stale = now - a.createdAt > APPROVAL_TTL_MS;
-        const failed = a.kind === "failure";
-        const why = blocked(a.flags)
-          ? "This can't go out as it is. Send it back to be redone."
-          : stale
-            ? "This has waited more than a day. Send it back for a fresh draft."
-            : undefined;
-        return (
-          <li key={a.id} className="card attention-card" style={{ borderLeftColor: wing?.color }}>
-            <div className="card-head">
-              <strong>{task?.title}</strong>
-              <span className="muted">{timeAgo(a.createdAt, now)}</span>
-            </div>
-            <span className="muted">
-              {wing?.name} · {failed ? a.summary : task && stageLabel(state, task)}
-            </span>
-            <ul className="notes">
-              {task?.notes.map((n, i) => <li key={i}>{n}</li>)}
-            </ul>
-            {a.content && <DraftPreview content={a.content} />}
-            {stale && <p className="flag-warn stale">Waited more than a day: send it back for a fresh draft.</p>}
-            {a.flags.length > 0 && (
-              <ul className="flags">
-                {a.flags.map((f) => (
-                  <li key={`${f.level}-${f.code}`} className={`flag-${f.level}`}>
-                    {failed ? "Stopped: " : f.level === "block" ? "Blocked: " : "Check: "}
-                    {f.message}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="card-actions">
-              {failed ? (
-                // A stage that stopped has nothing to approve: it can only run again.
-                <button className="primary" onClick={() => ledger.decide(a.id, false)}>
-                  Try again
-                </button>
-              ) : (
-                <>
-                  <button className="primary" disabled={!!why} title={why} onClick={() => ledger.decide(a.id, true)}>
-                    Approve
-                  </button>
-                  <button onClick={() => ledger.decide(a.id, false)}>Send back</button>
-                </>
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function blocked(flags: Flag[]) {
-  return flags.some((f) => f.level === "block");
-}
-
-/** Shows exactly what will go out if approved: the same string approval binds to. */
-function DraftPreview({ content }: { content: string }) {
-  let draft: Draft | null = null;
-  try {
-    draft = JSON.parse(content) as Draft;
-  } catch {
-    return <pre className="draft">{content}</pre>;
-  }
-  if (draft?.kind === "listing") {
-    return (
-      <div className="draft">
-        <div className="draft-label">Listing that will be published</div>
-        {draft.design && (
-          <img className="draft-design" src={`/api/designs/${encodeURIComponent(draft.design)}`} alt="The design this listing uses" />
-        )}
-        <strong>{draft.title}</strong> <span className="muted">${draft.priceUsd.toFixed(2)}</span>
-        <p>{draft.description}</p>
-        <div className="muted">Tags: {draft.tags.join(", ")}</div>
-      </div>
-    );
-  }
-  if (draft?.kind === "reply") {
-    return (
-      <div className="draft">
-        <div className="draft-label">Reply that will be sent</div>
-        <p>{draft.message}</p>
-      </div>
-    );
-  }
-  return null;
-}
-
-function Flow({ state }: { state: FacilityState }) {
-  return (
-    <div className="flow">
-      {state.wings
-        .filter((w) => !w.sealed)
-        .flatMap((wing) =>
-          wing.workflows.map((wf) => {
-            const tasks = state.tasks.filter((t) => t.wingId === wing.id && t.workflowId === wf.id);
-            const done = state.completed[completedKey(wing.id, wf.id)] ?? 0;
-            return (
-              <section key={`${wing.id}-${wf.id}`} className="flow-section">
-                <h3 style={{ color: wing.color }}>{wing.name} · {wf.label}</h3>
-                <div className="flow-columns">
-                  {wf.stages.map((stage, i) => {
-                    const here = tasks.filter((t) => t.stageIndex === i && t.state !== "done");
-                    return (
-                      <div key={stage.id} className="flow-col">
-                        <div className="flow-col-head">
-                          {stage.label}
-                          {stage.needsApproval && <span className="gate" title="Needs your approval">✋</span>}
-                        </div>
-                        {here.length === 0 && <div className="flow-empty">·</div>}
-                        {here.map((t) => (
-                          <div key={t.id} className={`flow-task ${t.state}`} title={t.title}>
-                            <span className="flow-title">{t.title}</span>
-                            {t.state === "active" && (
-                              <div className="mini-meter"><div style={{ width: `${t.progress * 100}%` }} /></div>
-                            )}
-                            {t.state === "awaiting_approval" && <span className="pill alert">Needs you</span>}
-                            {t.state === "queued" && (
-                              <span className="pill" title={t.waiting}>{t.waiting ? "Waiting" : "Queued"}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
-                  <div className="flow-col done-col">
-                    <div className="flow-col-head">Done</div>
-                    <div className="done-count">{done}</div>
-                  </div>
-                </div>
-              </section>
-            );
-          }),
-        )}
-    </div>
-  );
-}
-
-function Crew({
-  ledger,
+function Command({
+  onJobs,
   state,
-  live,
+  ledger,
+  now,
+  onTab,
+  onJobSelect,
+}: {
+  state: FacilityState;
+  ledger: RemoteFacility;
+  now: number;
+  onTab: (t: WorkspaceTab) => void;
+  onJobSelect: (id: string | null) => void;
+  onJobs: (filter: JobFilter) => void;
+}) {
+  const operator = state.operator?.active ?? "claude";
+  const stopped = state.tasks.filter(
+    (t) => jobCategory(state, t) === "blocked",
+  ).length + (state.operations ?? []).filter((op) => workStatus(op, now) === "blocked").length;
+  const logins = state.tasks.filter(
+    (t) => jobCategory(state, t) === "login",
+  ).length;
+  const reviews = state.approvals.filter(
+    (a) => a.status === "pending" && a.kind !== "failure",
+  ).length;
+  const working = ledger.connection !== "online" ? 0 : state.tasks.filter((t) => t.state === "active").length + (state.operations ?? []).filter((op) => workAlive(op, now)).length;
+  const notebook = [...state.tasks]
+    .reverse()
+    .find((t) => readResearch(t.brief));
+  const latest = [...state.tasks].reverse().slice(0, 3);
+  return (
+    <>
+      <div className="page-heading">
+        <h2>Command</h2>
+        <span className="micro">Overview</span>
+      </div>
+      <section className="operator-card" aria-label="Active operator">
+        <span className="operator-symbol">
+          <Icon name="command" size={23} />
+        </span>
+        <div>
+          <span className="micro">Active operator</span>
+          <strong>{MODELS[operator].name}</strong>
+        </div>
+        <span className="badge">
+          {operator === "codex" ? "Temporary" : "Primary"}
+        </span>
+      </section>
+      <Readiness state={state} now={now} control={ledger.getControl()} connected={ledger.connection === "online"} onResearch={() => onTab("research")} onJobs={() => onJobs("all")} />
+      <WorkBoard state={state} now={now} connected={ledger.connection === "online"}/>
+      <div className="summary-grid">
+        <button className="metric" onClick={() => onJobs("active")}>
+          <strong>{working}</strong>
+          <span>Running</span>
+        </button>
+        <button className="metric" onClick={() => onJobs("approval")}>
+          <strong>{reviews}</strong>
+          <span>Approval</span>
+        </button>
+        <button
+          className={`metric ${stopped ? "amber" : ""}`}
+          onClick={() => onJobs("blocked")}
+        >
+          <strong>{stopped}</strong>
+          <span>Blocked</span>
+        </button>
+      </div>
+      {(stopped > 0 || reviews > 0 || logins > 0) && (
+        <button
+          className="action-row attention-row"
+          onClick={() => onTab("work")}
+        >
+          <Icon name={stopped ? "help" : "shield"} size={19} />
+          <span className="row-copy">
+            <strong>{`${stopped + reviews + logins} ${stopped + reviews + logins === 1 ? "job needs" : "jobs need"} attention`}</strong>
+            <small>
+              {[
+                logins ? `${logins} login needed` : "",
+                stopped ? `${stopped} blocked` : "",
+                reviews ? `${reviews} approval` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </small>
+          </span>
+          <Icon name="chevron" size={15} />
+        </button>
+      )}
+      <div className="subheading">
+        <h3>Latest work</h3>
+        <button className="text-button" onClick={() => onTab("work")}>
+          All jobs <Icon name="arrow" size={14} />
+        </button>
+      </div>
+      <div className="row-list">
+        {latest.length ? (
+          latest.map((task) => (
+            <button
+              className="action-row"
+              key={task.id}
+              onClick={() => onJobSelect(task.id)}
+            >
+              <Icon
+                name={task.workflowId === "research-test" ? "research" : "work"}
+                size={18}
+              />
+              <span className="row-copy">
+                <strong>{task.title}</strong>
+                <small>
+                  {stageLabel(state, task)} · {timeAgo(task.updatedAt, now)}
+                </small>
+              </span>
+              <Icon name="chevron" size={14} />
+            </button>
+          ))
+        ) : (
+          <p className="section-intro">No jobs yet. Start a notebook in Lab.</p>
+        )}
+      </div>
+      <button
+        className="action-row lab-shortcut"
+        onClick={() => onTab("research")}
+      >
+        <Icon name="research" size={18} />
+        <span className="row-copy">
+          <strong>{notebook ? "Research notebook" : "Start research"}</strong>
+          <small>
+            {notebook
+              ? "Latest findings and supporting sources"
+              : "Qwen · public evidence analysis on this Mac"}
+          </small>
+        </span>
+        <Icon name="arrow" size={15} />
+      </button>
+      <details className="disclosure">
+        <summary>Operator & handover</summary>
+        <p>
+          {operator === "codex"
+            ? "Codex is temporarily handling writing. Claude can take command again through the same shared queue."
+            : "Claude handles writing. Codex takes command when Claude is unavailable."}
+        </p>
+        <p className="micro">
+          Handovers keep jobs, saved work and approvals. Previous operator
+          responses cannot advance a reassigned job.
+        </p>
+        <button
+          onClick={() =>
+            ledger.setOperator(
+              operator === "claude" ? "codex" : "claude",
+              state.operator?.generation ?? 0,
+            )
+          }
+        >
+          <Icon name="arrow" size={15} />
+          {operator === "claude" ? "Switch to Codex" : "Return to Claude"}
+        </button>
+        {!!state.operator?.changedAt && (
+          <p className="micro">
+            Last handover {timeAgo(state.operator.changedAt, now)} · Owner PIN
+            required
+          </p>
+        )}
+      </details>
+    </>
+  );
+}
+function Portrait({ agent }: { agent: Agent }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const ctx = ref.current?.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 28, 36);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(crewSprite(agent.sprite, "down", 0), 0, 0, 28, 36);
+  }, [agent.sprite.suit, agent.sprite.visor]);
+  return (
+    <span className="portrait">
+      <canvas ref={ref} width="28" height="36" aria-hidden="true" />
+    </span>
+  );
+}
+function Crew({
+  state,
   onSelect,
 }: {
-  ledger: FacilityPort;
   state: FacilityState;
-  live: boolean;
   onSelect: (s: Selection) => void;
 }) {
   return (
     <>
-      <ul className="cards">
-        {state.agents.map((a) => {
-          const task = a.taskId ? state.tasks.find((t) => t.id === a.taskId) : null;
-          const room = state.rooms.find((r) => r.id === a.roomId);
+      <div className="page-heading">
+        <h2>Crew</h2>
+        <span className="muted">{state.agents.length} agents</span>
+      </div>
+      <p className="section-intro">
+        Select an agent for its model, assignment and permissions.
+      </p>
+      <div className="row-list">
+        {state.agents.map((agent) => {
+          const model = agentModel(state, agent);
           return (
-            <li key={a.id} className="card crew-card">
-              <button className="crew-main" onClick={() => onSelect({ kind: "agent", id: a.id })}>
-                <span className="swatch" style={{ background: a.sprite.suit }} />
-                <span>
-                  <strong>{a.name}</strong> <span className="muted">{a.role}</span>
-                  <br />
-                  <span className={`status ${a.status}`}>{a.status}</span>
-                  <span className="muted"> · {room?.name}</span>
-                  {task && <span className="muted"> · {task.title}</span>}
-                  {task?.model && <span className="model-tag"> · {MODELS[task.model].name}</span>}
-                </span>
-              </button>
-              <button onClick={() => ledger.setAgentPaused(a.id, a.status !== "paused")}>
-                {a.status === "paused" ? "Resume" : "Pause"}
-              </button>
-            </li>
+            <button
+              className="crew-row"
+              id={`agent-${agent.id}`}
+              key={agent.id}
+              onClick={() => onSelect({ kind: "agent", id: agent.id })}
+            >
+              <Portrait agent={agent} />
+              <span className="row-copy">
+                <strong>
+                  {agent.name}{" "}
+                  <small className="inline-role">{agent.role}</small>
+                </strong>
+                <small>{model ? MODELS[model].name : "Application code"}</small>
+              </span>
+              <span
+                className={`status-dot ${agent.status}`}
+                title={agent.status}
+              />
+              <span className="sr-only">{agent.status}</span>
+              <Icon name="chevron" size={14} />
+            </button>
           );
         })}
-      </ul>
-      <Models state={state} live={live} />
+      </div>
+      <div className="crew-legend">
+        <span>
+          <i className="status-dot working" />
+          Working
+        </span>
+        <span>
+          <i className="status-dot idle" />
+          Idle
+        </span>
+        <span>
+          <i className="status-dot paused" />
+          Paused
+        </span>
+        <span>
+          <i className="status-dot waiting" />
+          Waiting
+        </span>
+      </div>
     </>
   );
 }
-
-const SEES: Record<DataClass, string> = { public: "public info", shop: "your shop's plans", customer: "customer messages" };
-
-/** The models behind the crew: where each one runs, what it may see, and what it has spent this month. */
-function Models({ state, live }: { state: FacilityState; live: boolean }) {
-  return (
-    <section className="models">
-      <h3>Models</h3>
-      {/* Matches the demo label in the top bar: until real models are connected, the crew is simulated. */}
-      {!live && <p className="muted">Demo mode: the crew is simulated, so no model is really called yet.</p>}
-      <ul>
-        {(Object.keys(MODELS) as ModelId[]).map((id) => {
-          const m = MODELS[id];
-          const busy = state.tasks.filter((t) => t.state === "active" && t.model === id).length;
-          const spent = state.modelSpend[id] ?? 0;
-          return (
-            <li key={id}>
-              <div className="card-head">
-                <strong>{m.name}</strong>
-                <span className="muted">{busy ? `${busy} working` : "idle"}</span>
-              </div>
-              <span className="muted">{m.where} · sees {m.sees.map((d) => SEES[d]).join(", ")}</span>
-              {m.monthlyCapUsd !== undefined && (
-                <span className="muted"> · {money(spent)} of {money(m.monthlyCapUsd)} this month</span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function Log({ state, now }: { state: FacilityState; now: number }) {
-  return (
-    <ul className="log">
-      {state.log.map((e) => (
-        <li key={e.id} className={`log-${e.level}`}>
-          <span className="muted">{timeAgo(e.at, now)}</span> {e.text}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function Inspector({ state, selection, onClose }: { state: FacilityState; selection: Selection; onClose: () => void }) {
-  let title = "";
-  let body: React.ReactNode = null;
-  if (selection.kind === "agent") {
-    const a = state.agents.find((x) => x.id === selection.id);
-    if (!a) return null;
-    const task = a.taskId ? state.tasks.find((t) => t.id === a.taskId) : null;
-    const finished = completedCount(state, a.wingId);
-    title = `${a.name} · ${a.role}`;
-    body = (
+export function Inspector({
+  state,
+  selection,
+  onClose,
+  ledger,
+  onTab,
+  onSelect,
+  onJobSelect,
+}: {
+  state: FacilityState;
+  selection: Selection;
+  onClose: () => void;
+  ledger?: RemoteFacility;
+  onTab?: (t: WorkspaceTab) => void;
+  onSelect?: (s: Selection) => void;
+  onJobSelect?: (id: string) => void;
+}) {
+  state = { ...state, agents: visibleAgents(state) };
+  const agent =
+    selection.kind === "agent"
+      ? state.agents.find((a) => a.id === selection.id)
+      : undefined;
+  const room =
+    selection.kind === "room"
+      ? state.rooms.find((r) => r.id === selection.id)
+      : state.rooms.find((r) => r.id === agent?.roomId);
+  if (!agent && !room)
+    return (
       <>
-        <p><span className={`status ${a.status}`}>{a.status}</span> in {state.rooms.find((r) => r.id === a.roomId)?.name}</p>
-        {task ? (
-          <>
-            <p>Working on <strong>{task.title}</strong> ({stageLabel(state, task)}, {Math.round(task.progress * 100)}%)</p>
-            {task.model && <p className="muted">Thinking with {MODELS[task.model].name}, {MODELS[task.model].where}</p>}
-          </>
-        ) : (
-          <p className="muted">No current task.</p>
-        )}
-        <p className="muted">Skills: {a.skills.join(", ")} · Wing completions: {finished}</p>
+        <button className="back-button" onClick={onClose}>
+          <Icon name="back" size={16} />
+          Back
+        </button>
+        <p>This item is no longer available.</p>
       </>
     );
-  } else {
-    const r = state.rooms.find((x) => x.id === selection.id);
-    if (!r) return null;
-    const wing = state.wings.find((w) => w.id === r.wingId);
-    const here = state.agents.filter((a) => a.roomId === r.id);
-    title = r.name;
-    body = (
-      <>
-        <p className="muted">{wing?.name}{wing && ` · budget ${money(state.spend[wing.id] ?? 0)} of ${money(wing.budgetMonthly)}`}</p>
-        <p>{here.length ? `Crew here: ${here.map((a) => a.name).join(", ")}` : "No crew here right now."}</p>
-      </>
-    );
-  }
+  const model = agent ? agentModel(state, agent) : null;
+  const task = state.tasks.find((t) => t.id === agent?.taskId);
+  const operation = agent ? operationForAgent(state, agent.id) : undefined;
+  const here = state.agents.filter((a) => a.roomId === room?.id);
+  const access = agent
+    ? [
+        ...new Set(
+          state.wings
+            .flatMap((w) => w.workflows.flatMap((f) => f.stages))
+            .filter((s) => canWorkStage(agent, agent.wingId, s))
+            .map((s) => s.data)
+            .filter(Boolean),
+        ),
+      ]
+        .map((d) =>
+          d === "public"
+            ? "Public information"
+            : d === "shop"
+              ? "Shop plans"
+              : "Customer messages",
+        )
+        .join(", ")
+    : "";
+  const roomTab: WorkspaceTab =
+    room?.kind === "lab"
+      ? "research"
+      : room?.kind === "security" || room?.kind === "vault"
+        ? "activity"
+        : room?.kind === "command"
+          ? "command"
+          : "work";
   return (
-    <div className="inspector" role="dialog" aria-label={title}>
-      <div className="card-head">
-        <strong>{title}</strong>
-        <button className="close" onClick={onClose} aria-label="Close">×</button>
+    <section
+      className="inspector"
+      aria-label={`${agent?.name ?? room?.name} details`}
+    >
+      <button className="back-button" onClick={onClose}>
+        <Icon name="back" size={16} />
+        Back to workspace
+      </button>
+      <div className="inspector-title">
+        {agent && <Portrait agent={agent} />}
+        <div>
+          <span className="eyebrow">{agent ? "AGENT" : "ROOM"}</span>
+          <h2 id="inspector-heading" tabIndex={-1}>
+            {agent?.name ?? room?.name}
+          </h2>
+          {agent && <p>{agent.role}</p>}
+        </div>
       </div>
-      {body}
-    </div>
+      {agent ? (
+        <>
+          <dl className="facts">
+            <div>
+              <dt>{task ? "Current model" : "Assigned model"}</dt>
+              <dd className="model-value">
+                {model ? MODELS[model].name : "Application code"}
+              </dd>
+            </div>
+            <div>
+              <dt>Runs through</dt>
+              <dd>{model ? MODELS[model].where : "this Mac"}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd className="capitalize">{agent.status}</dd>
+            </div>
+            <div>
+              <dt>Workstation</dt>
+              <dd>{room?.name}</dd>
+            </div>
+          </dl>
+          <div className="assignment">
+            <span className="eyebrow">ASSIGNMENT</span>
+            <h3>{operation?.title ?? task?.title ?? "No active assignment"}</h3>
+            <p>
+              {operation?.summary ?? (task ? stageLabel(state, task) : "Waiting for a matching job.")}
+            </p>
+            {task && (
+              <button
+                className="text-button"
+                onClick={() => onJobSelect?.(task.id)}
+              >
+                Open job <Icon name="arrow" size={14} />
+              </button>
+            )}
+          </div>
+          <WorkBoard state={state} now={Date.now()} agentId={agent.id} connected={!ledger || ledger.connection === "online"}/>
+          {ledger && (
+            <button
+              onClick={() =>
+                ledger.setAgentPaused(agent.id, agent.status !== "paused")
+              }
+            >
+              <Icon
+                name={agent.status === "paused" ? "play" : "pause"}
+                size={15}
+              />
+              {agent.status === "paused" ? "Resume agent" : "Pause agent"}
+            </button>
+          )}
+          <details className="disclosure">
+            <summary>Role & permissions</summary>
+            <p>{access || "Code checks and approved content only"}.</p>
+            <p className="micro">
+              Role: {agent.capability}. Role permissions are fixed in
+              application code. Model output cannot grant additional access.
+            </p>
+            {model === "typeset" && (
+              <p className="micro">
+                Artwork uses the local typography designer. Codex image handoff
+                is not connected.
+              </p>
+            )}
+          </details>
+        </>
+      ) : (
+        <>
+          <p className="section-intro">
+            {ROOM_DESCRIPTIONS[room!.id] ?? "Reserved for a future business."}
+          </p>
+          <WorkBoard state={state} now={Date.now()} roomId={room!.id} connected={!ledger || ledger.connection === "online"}/>
+          {room?.kind !== "sealed" && onTab && (
+            <button onClick={() => onTab(roomTab)}>
+              Open {WORKSPACE_TABS.find((t) => t.id === roomTab)?.label}{" "}
+              <Icon name="arrow" size={15} />
+            </button>
+          )}
+          <div className="subheading">
+            <h3>Stationed here</h3>
+            <span className="micro">{here.length} agents</span>
+          </div>
+          <div className="row-list">
+            {here.length ? (
+              here.map((a) => (
+                <button
+                  key={a.id}
+                  className="crew-row"
+                  onClick={() => onSelect?.({ kind: "agent", id: a.id })}
+                >
+                  <Portrait agent={a} />
+                  <span className="row-copy">
+                    <strong>{a.name}</strong>
+                    <small>
+                      {agentModel(state, a)
+                        ? MODELS[agentModel(state, a)!].name
+                        : "Application code"}
+                    </small>
+                  </span>
+                  <Icon name="chevron" size={14} />
+                </button>
+              ))
+            ) : (
+              <p className="micro">No agents stationed here.</p>
+            )}
+          </div>
+          <p className="micro room-completion">
+            {completedCount(state, room?.wingId)} completed jobs in this wing.
+          </p>
+        </>
+      )}
+    </section>
   );
 }

@@ -1,7 +1,7 @@
 import type { FacilityState, Task } from "../core/types";
 
 export function money(n: number) {
-  return `$${n.toFixed(2)}`;
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
 
 export function timeAgo(at: number, now: number) {

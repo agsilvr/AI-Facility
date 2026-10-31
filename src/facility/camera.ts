@@ -38,7 +38,7 @@ export function stepZoom(zoom: number, direction: 1 | -1) {
 /** The biggest rung at which an area fits on screen. */
 export function zoomToFit(area: { w: number; h: number }, view: Viewport) {
   const fit = Math.min(view.width / area.w, view.height / area.h);
-  return [...ZOOMS].reverse().find((z) => z <= fit) ?? fit;
+  return fit;
 }
 
 /** Keep the camera over the facility; if the facility is smaller than the screen, centre it. */
@@ -65,8 +65,8 @@ export function toWorld(camera: Camera, screen: { x: number; y: number }, view: 
 
 /** Where the map opens: as big as fits the facility's height, centred on the Command Center. */
 export function startCamera(layout: FacilityLayout, view: Viewport): Camera {
-  const zoom = zoomToFit({ w: 1, h: layout.height }, view);
-  return clampCamera({ zoom, x: layout.center.x, y: layout.height / 2 }, layout, view);
+  const zoom = zoomToFit({ w: layout.width, h: layout.height }, view);
+  return clampCamera({ zoom, x: layout.width / 2, y: layout.height / 2 }, layout, view);
 }
 
 /** The camera for looking at an area, such as a wing or a room. */

@@ -7,46 +7,46 @@ import type { Facing } from "./movement";
 // smoothing off, which keeps every pixel crisp.
 
 export const P = {
-  ink: "#0b0a10",
-  night: "#14121c",
-  dirt0: "#24170f",
-  dirt1: "#2f1e13",
-  dirt2: "#3b2618",
-  dirt3: "#4c321f",
-  clay: "#6b4a2f",
-  pebble: "#8b6b4c",
-  stone0: "#3d3c48",
-  stone1: "#5a5968",
-  stone2: "#85849a",
-  hull0: "#191b2b",
-  hull1: "#23263c",
-  hull2: "#2f3350",
-  wall0: "#262a45",
-  wall1: "#343a5e",
-  wall2: "#4a5282",
-  trim: "#6d77b0",
-  steel0: "#3a3f55",
-  steel1: "#565d7a",
-  steel2: "#8890ad",
+  ink: "#302b22",
+  night: "#413a2c",
+  dirt0: "#131a20",
+  dirt1: "#182027",
+  dirt2: "#1b242b",
+  dirt3: "#25313a",
+  clay: "#2e3c43",
+  pebble: "#3b4a51",
+  stone0: "#303947",
+  stone1: "#45515d",
+  stone2: "#5d6c7a",
+  hull0: "#4e4734",
+  hull1: "#6c5a3f",
+  hull2: "#8c7550",
+  wall0: "#625d44",
+  wall1: "#807359",
+  wall2: "#ab9670",
+  trim: "#c6b17e",
+  steel0: "#656b5b",
+  steel1: "#8a927b",
+  steel2: "#b5bda1",
   white: "#f4f1e8",
   paper: "#d9d4c5",
-  grey: "#9a9fb8",
-  red: "#ff4d5e",
-  darkRed: "#8c1f2c",
-  orange: "#ff9f1c",
-  yellow: "#ffd84d",
+  grey: "#aab19a",
+  red: "#cf825e",
+  darkRed: "#9a6449",
+  orange: "#d0a15b",
+  yellow: "#e7ce81",
   gold: "#e8b02a",
   darkGold: "#8a5f12",
-  green: "#3ddc84",
-  darkGreen: "#16784a",
-  teal: "#2ec4b6",
-  blue: "#3fa7ff",
-  darkBlue: "#1b4f8a",
-  purple: "#a167ff",
-  pink: "#ff77a8",
+  green: "#9ab779",
+  darkGreen: "#59794b",
+  teal: "#84b1a0",
+  blue: "#91b6b5",
+  darkBlue: "#577b7a",
+  purple: "#b6a3b9",
+  pink: "#d2a2a4",
   brown: "#8a5a3b",
   darkBrown: "#55351f",
-  screen: "#07131f",
+  screen: "#283f36",
 } as const;
 
 /** Fill one pixel-aligned rectangle. */
@@ -141,8 +141,8 @@ function shade(hex: string, amount: number) {
 function paintCrew(paint: Paint, look: SpriteLook, facing: Facing, step: 0 | 1) {
   const suit = look.suit;
   const suitDark = shade(look.suit, -0.18);
-  const helmet = P.white;
-  const helmetShade = P.paper;
+  const helmet = "#edc69a";
+  const helmetShade = "#c8956b";
   const boots = P.steel0;
   // Legs, swapping lengths to walk.
   const left = step === 0 ? 3 : 2;
@@ -163,8 +163,10 @@ function paintCrew(paint: Paint, look: SpriteLook, facing: Facing, step: 0 | 1) 
   paint(3, 6, 6, 1, helmetShade);
   paint(2, 5, 8, 1, helmetShade);
   if (facing === "down") {
-    paint(3, 2, 6, 3, look.visor);
-    paint(3, 2, 2, 1, P.white);
+    paint(2, 1, 8, 2, P.darkBrown);
+    paint(3, 3, 6, 3, helmet);
+    paint(4, 4, 1, 1, P.ink);
+    paint(7, 4, 1, 1, P.ink);
     paint(1, 7, 1, 4, suitDark);
     paint(10, 7, 1, 4, suitDark);
     paint(1, 11, 1, 1, helmet);

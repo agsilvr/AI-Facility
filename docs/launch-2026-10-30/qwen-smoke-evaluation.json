@@ -1,0 +1,20 @@
+{
+  "evaluatedAtLocal": "2026-10-30 20:17 America/New_York",
+  "model": "qwen3.5:9b",
+  "durationMs": 35299,
+  "fineTuned": false,
+  "schemaValid": true,
+  "candidateFamiliesExactlyOnce": true,
+  "explicitEvidencePeriods": true,
+  "specificKeywordAndCostValidation": true,
+  "reviewVsSalesLimits": "pass",
+  "citationRoleCoverage": "pass on supplied statements in this one run",
+  "performanceClaims": "pass: no high-performing/proven/profit claims from reviews",
+  "personalizationConsistency": "pass",
+  "creativeDifferentiation": "fail: book-cat and reader-print ideas remain generic; whimsical wording persists",
+  "summaryCompleteness": "fail: summary ends mid-sentence at field length limit",
+  "customOrderLaborAndProofCost": "incomplete: per-order handling is acknowledged in summary but not explicitly costed",
+  "overall": "usable research draft requiring creative/economic review",
+  "approvedForPublishing": false,
+  "scope": "One final public-only prompt smoke run; not a benchmark, fine-tuning or proof of maximum model effectiveness"
+}

@@ -1,6 +1,20 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ownerStatus, setFirstPin, unlock, lock, type OwnerProblem, type OwnerStatus } from "../client/owner";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import {
+  ownerStatus,
+  setFirstPin,
+  unlock,
+  lock,
+  type OwnerProblem,
+  type OwnerStatus,
+} from "../client/owner";
 import type { RemoteFacility } from "../client/remote";
+import { Icon } from "./Icon";
 
 // Everything on screen about the owner's PIN: asking for it when the server
 // refuses a decision, setting the first one from the installer's setup link,
@@ -26,11 +40,14 @@ export function useOwner(facility: RemoteFacility, now: number): Owner {
   const [status, setStatus] = useState<OwnerStatus | null>(null);
   const [asking, setAsking] = useState<Asking>(null);
   // The setup code comes from the link the installer opens; it's only ever used once.
-  const [setupCode, setSetupCode] = useState(() => new URLSearchParams(location.search).get("setup"));
+  const [setupCode, setSetupCode] = useState(() =>
+    new URLSearchParams(location.search).get("setup"),
+  );
   const waiting = useRef<(() => void) | null>(null);
 
   const promptFor = useCallback(
-    (s: OwnerStatus | null) => setAsking(s && !s.pinSet ? (setupCode ? "setup" : "no-pin") : "unlock"),
+    (s: OwnerStatus | null) =>
+      setAsking(s && !s.pinSet ? (setupCode ? "setup" : "no-pin") : "unlock"),
     [setupCode],
   );
 
@@ -67,7 +84,9 @@ export function useOwner(facility: RemoteFacility, now: number): Owner {
       promptFor(status);
     },
     lockNow: () => {
-      void lock().then(() => setStatus((s) => (s ? { ...s, unlockedUntil: null } : s)));
+      void lock().then(() =>
+        setStatus((s) => (s ? { ...s, unlockedUntil: null } : s)),
+      );
     },
     accepted: (until) => {
       setStatus({ pinSet: true, unlockedUntil: until });
@@ -94,7 +113,12 @@ function problemText(problem: OwnerProblem, retryAt: number | null) {
     case "bad-pin":
       return "That PIN isn't right.";
     case "locked": {
-      const at = retryAt ? new Date(retryAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "later";
+      const at = retryAt
+        ? new Date(retryAt).toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : "later";
       return `Too many wrong tries. You can try again at ${at}.`;
     }
     case "weak-pin":
@@ -117,6 +141,9 @@ export function OwnerDialog({ owner }: { owner: Owner }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   const mode = owner.asking;
 
   useEffect(() => {
@@ -128,19 +155,50 @@ export function OwnerDialog({ owner }: { owner: Owner }) {
 
   useEffect(() => {
     if (!mode) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && owner.cancel();
+    const previous = document.activeElement as HTMLElement | null;
+    const focusable = () => [
+      ...(dialog.current?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), [tabindex="0"]',
+      ) ?? []),
+    ];
+    (input.current ?? focusable()[0])?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busyRef.current) {
+        e.preventDefault();
+        owner.cancel();
+      }
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mode, owner]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      previous?.focus();
+    };
+  }, [mode]);
 
   if (!mode) return null;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (busy) return;
     if (!PIN_RULE.test(pin)) return setError("Use 6 to 12 digits.");
-    if (mode === "setup" && pin !== again) return setError("The two PINs don't match.");
+    if (mode === "setup" && pin !== again)
+      return setError("The two PINs don't match.");
     setBusy(true);
-    const answer = mode === "setup" ? await setFirstPin(pin, owner.setupCode ?? "") : await unlock(pin);
+    const answer =
+      mode === "setup"
+        ? await setFirstPin(pin, owner.setupCode ?? "")
+        : await unlock(pin);
     setBusy(false);
     if (answer.ok) return owner.accepted(answer.unlockedUntil);
     setPin("");
@@ -150,22 +208,40 @@ export function OwnerDialog({ owner }: { owner: Owner }) {
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && owner.cancel()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="owner-title">
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) =>
+        !busy && e.target === e.currentTarget && owner.cancel()
+      }
+    >
+      <div
+        ref={dialog}
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="owner-title"
+      >
         {mode === "no-pin" ? (
           <>
             <h2 id="owner-title">Choose your approval PIN first</h2>
             <p>
-              Nothing can be approved until you've chosen a PIN. The installer opens a setup page for it; if you've
-              closed it, run the installer again and it will open a fresh one.
+              Nothing can be approved until you've chosen a PIN. The installer
+              opens a setup page for it; if you've closed it, run the installer
+              again and it will open a fresh one.
             </p>
             <div className="modal-actions">
-              <button className="primary" onClick={owner.cancel}>OK</button>
+              <button className="primary" onClick={owner.cancel}>
+                OK
+              </button>
             </div>
           </>
         ) : (
-          <form onSubmit={submit}>
-            <h2 id="owner-title">{mode === "setup" ? "Choose your approval PIN" : "Enter your approval PIN"}</h2>
+          <form onSubmit={submit} aria-busy={busy}>
+            <h2 id="owner-title">
+              {mode === "setup"
+                ? "Choose your approval PIN"
+                : "Enter your approval PIN"}
+            </h2>
             <p className="muted">
               {mode === "setup"
                 ? "6 to 12 digits. Only someone with this PIN can approve, send back or restart work. Don't reuse your Mac password."
@@ -177,7 +253,9 @@ export function OwnerDialog({ owner }: { owner: Owner }) {
                 ref={input}
                 type="password"
                 inputMode="numeric"
-                autoComplete={mode === "setup" ? "new-password" : "current-password"}
+                autoComplete={
+                  mode === "setup" ? "new-password" : "current-password"
+                }
                 maxLength={12}
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
@@ -196,11 +274,17 @@ export function OwnerDialog({ owner }: { owner: Owner }) {
                 />
               </label>
             )}
-            {error && <p className="pin-error" role="alert">{error}</p>}
+            {error && (
+              <p className="pin-error" role="alert">
+                {error}
+              </p>
+            )}
             <div className="modal-actions">
-              <button type="button" onClick={owner.cancel}>Cancel</button>
+              <button type="button" disabled={busy} onClick={owner.cancel}>
+                Cancel
+              </button>
               <button type="submit" className="primary" disabled={busy}>
-                {mode === "setup" ? "Set PIN" : "Unlock"}
+                {busy ? "Unlocking…" : mode === "setup" ? "Set PIN" : "Unlock"}
               </button>
             </div>
           </form>
@@ -214,19 +298,38 @@ export function OwnerDialog({ owner }: { owner: Owner }) {
 export function OwnerBadge({ owner, now }: { owner: Owner; now: number }) {
   if (!owner.status) return null;
   if (!owner.status.pinSet) {
-    return <span className="owner-badge warn" title="Approvals are locked until you choose a PIN">🔒 No PIN set</span>;
+    return (
+      <span
+        className="owner-badge warn"
+        title="Approvals are locked until you choose a PIN"
+      >
+        <Icon name="lock" size={15} /> Set up owner PIN
+      </span>
+    );
   }
   if (owner.unlocked) {
-    const minutes = Math.max(1, Math.ceil((owner.status.unlockedUntil! - now) / 60000));
+    const minutes = Math.max(
+      1,
+      Math.ceil((owner.status.unlockedUntil! - now) / 60000),
+    );
     return (
-      <button className="owner-badge open" onClick={owner.lockNow} title="Lock now: the next decision will ask for your PIN">
-        🔓 Unlocked · {minutes}m · Lock
+      <button
+        className="owner-badge open"
+        onClick={owner.lockNow}
+        title="Lock now: the next decision will ask for your PIN"
+      >
+        <Icon name="unlock" size={15} /> <span>Lock</span>
+        <small>{minutes}m</small>
       </button>
     );
   }
   return (
-    <button className="owner-badge" onClick={owner.ask} title="Enter your PIN now so decisions go straight through">
-      🔒 Locked
+    <button
+      className="owner-badge"
+      onClick={owner.ask}
+      title="Enter your PIN now so decisions go straight through"
+    >
+      <Icon name="lock" size={15} /> <span>Unlock</span>
     </button>
   );
 }

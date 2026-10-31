@@ -37,6 +37,7 @@ describe("Ledger", () => {
 
     runStage(ledger, task.id); // research
     runStage(ledger, task.id); // design
+    runStage(ledger, task.id); // artwork checks
     runStage(ledger, task.id); // draft listing -> approval
     expect(ledger.task(task.id)?.state).toBe("awaiting_approval");
 
@@ -46,18 +47,19 @@ describe("Ledger", () => {
 
     const approval = ledger.getState().approvals[0];
     ledger.decide(approval.id, true);
-    expect(ledger.task(task.id)?.stageIndex).toBe(3);
+    expect(ledger.task(task.id)?.stageIndex).toBe(4);
 
     runStage(ledger, task.id); // publish
     const done = ledger.task(task.id)!;
     expect(done.state).toBe("done");
-    expect(done.notes).toHaveLength(4);
+    expect(done.notes).toHaveLength(5);
     expect(ledger.getState().agents.every((a) => a.taskId === null)).toBe(true);
   });
 
   it("sends rejected work back one stage", () => {
     const ledger = setup();
     const task = ledger.createTask("etsy", "listing", "Mug");
+    runStage(ledger, task.id);
     runStage(ledger, task.id);
     runStage(ledger, task.id);
     runStage(ledger, task.id);
@@ -175,13 +177,13 @@ describe("Ledger", () => {
       expect(ledger.load().busy.qwen ?? 0).toBe(0);
     });
 
-    it("sends a second research job to DeepSeek while Qwen is busy, and holds one when neither can take it", () => {
+    it("sends a second public research job to DeepSeek while Qwen is busy, and holds one when neither can take it", () => {
       const base = initialState();
       // Scout is the only researcher, so give the wing a second one for this test.
       const scout = base.agents.find((a) => a.id === "scout")!;
       const ledger = new Ledger({ ...base, agents: [...base.agents, { ...scout, id: "scout-2" }] }, () => 5_000);
-      const a = ledger.createTask("etsy", "listing", "A");
-      const b = ledger.createTask("etsy", "listing", "B");
+      const a = ledger.createTask("etsy", "research-test", "A");
+      const b = ledger.createTask("etsy", "research-test", "B");
       dispatch(ledger);
       expect(ledger.task(a.id)?.model).toBe("qwen");
       expect(ledger.task(b.id)?.model).toBe("deepseek");
@@ -189,7 +191,7 @@ describe("Ledger", () => {
       // DeepSeek uses up its monthly cap while Qwen is still busy.
       ledger.work(b.id, 1, 5);
       ledger.finishStage(b.id, "done");
-      const c = ledger.createTask("etsy", "listing", "C");
+      const c = ledger.createTask("etsy", "research-test", "C");
       dispatch(ledger);
       dispatch(ledger);
       expect(ledger.task(c.id)?.state).toBe("queued");

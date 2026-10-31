@@ -115,7 +115,7 @@ describe("approval gate", () => {
 });
 
 describe("approvals expire and are used once", () => {
-  /** Approve the reply, then put Echo on the send stage. */
+  /** Approve the reply, then put the code-only delivery actor on the send stage. */
   function approvedAndSending() {
     const setup = pendingReply();
     setup.ledger.decide(setup.approvalId, true);

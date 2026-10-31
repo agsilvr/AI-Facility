@@ -10,6 +10,7 @@ import { Designs } from "./crew/designs";
 import { Facility } from "./facility";
 import { createFacilityServer } from "./http";
 import { Store } from "./store";
+import { testPng } from "./test-png";
 
 describe("Store", () => {
   it("saves and reloads the facility, keeping log history", () => {
@@ -30,6 +31,27 @@ describe("Store", () => {
     first.save();
     const second = new Facility(store);
     expect(second.ledger.task(task.id)?.state).toBe("queued");
+  });
+
+  it("reloads identities and permissions from code, retaining only saved pauses", () => {
+    const store = new Store(":memory:");
+    const first = new Facility(store);
+    const scout = first.ledger.agent("scout")!;
+    scout.skills.push("publish");
+    scout.capability = "publish";
+    scout.wingId = "core";
+    first.ledger.setAgentPaused("scout", true);
+    const state = first.ledger.getState();
+    state.agents = state.agents.filter((a) => a.id !== "relay" && a.id !== "post");
+    state.agents.push({ ...scout, id: "injected-admin" });
+    first.save();
+
+    const second = new Facility(store);
+    expect(second.ledger.agent("scout")).toMatchObject({ capability: "research", wingId: "etsy", skills: ["research", "research-test"], status: "paused" });
+    expect(second.ledger.agent("injected-admin")).toBeUndefined();
+    expect(second.ledger.agent("relay")?.capability).toBe("publish");
+    expect(second.ledger.agent("post")?.capability).toBe("send");
+    store.close();
   });
 });
 
@@ -145,7 +167,63 @@ describe("HTTP API", () => {
     const res = await fetch(`${base}/api/state`);
     const body = await res.json();
     expect(body.state.wings.length).toBeGreaterThan(0);
-    expect(body.control).toEqual({ running: true, speed: 1, mode: "demo" });
+    expect(body.control).toEqual({ running: true, speed: 1, mode: "demo", automaticProducts: false });
+  });
+
+  it("requires the owner to reset the local queue and read its recoverable archive", async () => {
+    const approvalId = makePendingApproval();
+    const reset = { id: "fresh-launch", reason: "Start over with fresh research" };
+    expect((await post("/api/queue/reset", reset)).status).toBe(401);
+    const owner = await ownerCookie();
+    expect((await post("/api/queue/reset", reset, { ...owner, Origin: "https://evil.example" })).status).toBe(403);
+    expect((await post("/api/queue/reset", { ...reset, id: "../bad" }, owner)).status).toBe(400);
+    const result = await post("/api/queue/reset", reset, owner);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({ ok: true, archivedTasks: 1, alreadyApplied: false });
+    expect(facility.ledger.getState().tasks).toEqual([]);
+    expect((await post(`/api/approvals/${approvalId}`, { approve: true }, owner)).status).toBe(404);
+    expect((await fetch(`${base}/api/queue-archives/fresh-launch`)).status).toBe(401);
+    const archive = await fetch(`${base}/api/queue-archives/fresh-launch`, { headers: owner });
+    expect(archive.status).toBe(200);
+    expect((await archive.json()).archive.approvals[0].id).toBe(approvalId);
+    expect((await fetch(`${base}/api/queue-archives/missing`, { headers: owner })).status).toBe(404);
+    expect(await (await post("/api/queue/reset", reset, owner)).json()).toMatchObject({ alreadyApplied: true });
+  });
+
+  it("receives only the current artwork draft and serves it as a protected PNG without approving it", async () => {
+    const task = facility.ledger.createTask("etsy", "artwork-pilot", "Pilot");
+    facility.ledger.assign(task.id, "scout");
+    facility.ledger.finishStage(task.id, "Selected");
+    facility.ledger.assign(task.id, "muse");
+    facility.ledger.requestArtwork(task.id, "A specific original artwork brief");
+    const requestId = facility.ledger.task(task.id)!.artworkRequest!.id;
+    const body = { requestId, pngBase64: testPng().toString("base64") };
+    const path = `/api/tasks/${task.id}/artwork`;
+    expect((await post(path, { ...body, requestId: "old" })).status).toBe(409);
+    expect((await post(path, { ...body, pngBase64: "not a PNG" })).status).toBe(400);
+    expect((await post(path, body, { Origin: "https://evil.example" })).status).toBe(403);
+    const response = await post(path, body);
+    expect(response.status).toBe(200);
+    const { asset } = await response.json();
+    const image = await fetch(`${base}/api/designs/${asset.id}`);
+    expect(image.headers.get("content-type")).toBe("image/png");
+    expect(image.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(Buffer.from(await image.arrayBuffer())).toEqual(testPng());
+    expect((await post(path, body)).status).toBe(409);
+    expect(facility.ledger.task(task.id)?.approvedContent).toBeUndefined();
+    expect((await post("/api/artwork-pilot", {})).status).toBe(409);
+  });
+
+  it("holds an artwork handoff while production is paused", async () => {
+    const task = facility.ledger.createTask("etsy", "artwork-pilot", "Paused pilot");
+    facility.ledger.assign(task.id, "scout"); facility.ledger.finishStage(task.id, "Selected");
+    facility.ledger.assign(task.id, "muse"); facility.ledger.requestArtwork(task.id, "Specific brief");
+    const requestId = facility.ledger.task(task.id)!.artworkRequest!.id;
+    facility.setControl({ running: false });
+    const res = await post(`/api/tasks/${task.id}/artwork`, { requestId, pngBase64: testPng().toString("base64") });
+    expect(res.status).toBe(409);
+    expect(facility.ledger.task(task.id)?.artwork).toBeUndefined();
+    expect(facility.ledger.task(task.id)?.artworkRequest?.id).toBe(requestId);
   });
 
   it("approves work for the owner", async () => {
@@ -232,7 +310,7 @@ describe("HTTP API", () => {
     expect((await post("/api/agents/scout/pause", { paused: false })).status).toBe(401);
     expect(facility.ledger.agent("scout")?.status).toBe("paused");
     expect((await post("/api/control", { running: false, speed: 4 })).status).toBe(200);
-    expect(facility.getControl()).toEqual({ running: false, speed: 4, mode: "demo" });
+    expect(facility.getControl()).toEqual({ running: false, speed: 4, mode: "demo", automaticProducts: false });
     expect((await post("/api/control", { running: true })).status).toBe(401);
     expect(facility.getControl().running).toBe(false);
     await post("/api/control", { speed: 1000 });

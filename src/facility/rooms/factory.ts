@@ -63,11 +63,11 @@ export const factory: RoomArt = {
   floor(ctx, s) {
     const f = s.floor;
     // Diamond-plate steel.
-    rect(ctx, f.x, f.y, f.w, f.h, "#4a4e57");
+    rect(ctx, f.x, f.y, f.w, f.h, "#b4a78a");
     for (let y = f.y + 2; y < f.y + f.h; y += 6) {
       for (let x = f.x + ((y - f.y) % 12 === 2 ? 1 : 4); x < f.x + f.w; x += 6) {
-        rect(ctx, x, y, 2, 1, "#636874");
-        rect(ctx, x, y + 1, 2, 1, "#3a3d45");
+        rect(ctx, x, y, 2, 1, "#c4b79a");
+        rect(ctx, x, y + 1, 2, 1, "#958d73");
       }
     }
     // Painted lines: along the front of the workstations and either side of the walkway.
@@ -83,7 +83,7 @@ export const factory: RoomArt = {
   wall(ctx, s) {
     const w = s.wall;
     // Corrugated steel.
-    for (let x = w.x; x < w.x + w.w; x += 2) rect(ctx, x, w.y, 1, w.h, (x / 2) % 2 ? "#5a5f6b" : "#4b505b");
+    for (let x = w.x; x < w.x + w.w; x += 2) rect(ctx, x, w.y, 1, w.h, (x / 2) % 2 ? "#a89b7c" : "#9d9075");
     for (let x = w.x; x < w.x + w.w; x += 8) rect(ctx, x, w.y + 18, 4, 3, (x / 8) % 2 ? P.orange : P.ink);
     // Pipes along the top, with valves.
     pipe(ctx, w.x, w.y + 5, w.w, "#b86b2c", "#7a4318");

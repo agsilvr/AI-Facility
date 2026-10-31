@@ -4,6 +4,8 @@ import type { AgentId, ApprovalId, FacilityState } from "./types";
 export interface Control {
   running: boolean;
   speed: number;
+  /** Explicit saved policy, not inferred from the global run switch. */
+  automaticProducts?: boolean;
   /** Demo: simulated crew with canned output. Live: real models do the work. Shown on screen either way. */
   mode: "demo" | "live";
 }

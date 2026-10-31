@@ -80,8 +80,8 @@ export function checkListing(d: ListingDraft): Flag[] {
   if (d.tags.some((t) => t.length > ETSY_TAG_LEN_MAX)) {
     flags.push(flag("block", "tag-long", `Each Etsy tag must be ${ETSY_TAG_LEN_MAX} characters or fewer.`));
   }
-  if (!Number.isFinite(d.priceUsd) || d.priceUsd < 1 || d.priceUsd > 1000) {
-    flags.push(flag("block", "price", "The price is missing or outside $1 to $1,000."));
+  if (d.priceUsd === null || !Number.isFinite(d.priceUsd) || d.priceUsd < 1 || d.priceUsd > 1000) {
+    flags.push(flag("block", "price", "A verified price is required before approval; supplier costs, shipping and fees must be resolved. Prices must be within $1 to $1,000."));
   }
   if (!AI_DISCLOSURE.test(d.description)) {
     flags.push(flag("block", "ai-disclosure", "Etsy requires the description to say how AI was used."));
@@ -101,6 +101,13 @@ export function checkReply(d: ReplyDraft): Flag[] {
 }
 
 export function checkDraft(d: Draft): Flag[] {
+  if (d.kind === "artwork") {
+    const flags = checkOutgoingText(d.title, "artwork title");
+    if (!/^[0-9a-f]{64}$/.test(d.design) || !Number.isInteger(d.width) || !Number.isInteger(d.height) || d.width < 1 || d.height < 1 || !d.prompt.trim()) {
+      flags.push(flag("block", "artwork-invalid", "The artwork is missing a valid content fingerprint, dimensions or generation prompt."));
+    }
+    return flags;
+  }
   return d.kind === "listing" ? checkListing(d) : checkReply(d);
 }
 
@@ -111,6 +118,7 @@ export function hasBlockingFlag(flags: Flag[]) {
 /** Canonical form of a draft. Approval binds to this exact string. */
 export function serializeDraft(d: Draft | undefined): string {
   if (!d) return "null";
+  if (d.kind === "artwork") return JSON.stringify({ kind: d.kind, title: d.title, design: d.design, width: d.width, height: d.height, prompt: d.prompt, revision: d.revision, inspection: d.inspection ?? null });
   return d.kind === "listing"
     ? JSON.stringify({ kind: d.kind, title: d.title, description: d.description, tags: d.tags, priceUsd: d.priceUsd, design: d.design ?? null })
     : JSON.stringify({ kind: d.kind, message: d.message });

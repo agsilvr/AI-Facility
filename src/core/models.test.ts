@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { allowedModels, MODELS, route, ROUTES } from "./models";
-import { wings } from "./seed";
+import { canWorkStage } from "./capabilities";
+import { initialState, wings } from "./seed";
 import type { DataClass, Job } from "./types";
 
 const idle = { busy: {}, spent: {} };
@@ -14,8 +15,10 @@ describe("model router", () => {
     }
   });
 
-  it("keeps customer data away from the designer", () => {
-    expect(allowedModels("design", "customer")).toEqual(["typeset"]);
+  it("keeps customer data away from the design role while allowing Codex to write customer replies", () => {
+    const designer = initialState().agents.find((a) => a.id === "muse")!;
+    expect(canWorkStage(designer, "etsy", { id: "design", label: "Design", roomId: "etsy-studio", job: "design", data: "customer" })).toBe(false);
+    expect(allowedModels("write", "customer")).toContain("codex");
   });
 
   it("gives research to Qwen on the Mac first", () => {
@@ -52,7 +55,7 @@ describe("model router", () => {
 
   it("can route every stage of the real facility", () => {
     for (const stage of wings.flatMap((w) => w.workflows.flatMap((wf) => wf.stages))) {
-      if (stage.action) continue;
+      if (stage.action || stage.executor === "code") continue;
       expect(route(stage.job!, stage.data!, idle).ok, stage.id).toBe(true);
     }
   });

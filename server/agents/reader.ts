@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scanUntrusted } from "../../src/core/safety";
@@ -20,9 +20,9 @@ import type { Flag } from "../../src/core/types";
 // - Both: the answer must match a JSON schema, and is checked again here, and
 //   untrusted text is fenced with a random marker the sender can't guess.
 //
-// Whatever an injected instruction says, the worst outcome is a bad draft,
-// which the safety checks flag and the owner must approve before anything
-// leaves the Mac. Actions are never performed by readers.
+// Injection can still corrupt the answer. Schema and content checks narrow
+// the output; owner approval remains necessary for delivery. Actions are never
+// performed by readers. CLI configuration tests do not prove OS-level isolation.
 
 export interface ReaderRequest {
   /** What the reader is for, e.g. "etsy-reply". Logged with the run. */
@@ -66,7 +66,7 @@ export interface AuditEntry {
 }
 
 /** The models that can read outside text. Image models never do. */
-export type ReaderModel = "claude" | "qwen";
+export type ReaderModel = "claude" | "qwen" | "codex";
 
 export interface ReaderOptions {
   spawner?: Spawner;
@@ -162,7 +162,46 @@ function sha256(text: string) {
 async function read(req: ReaderRequest, options: ReaderOptions): Promise<ReaderResult> {
   const inputFlags = scanUntrusted(req.untrusted);
   if (req.model === "qwen") return readWithQwen(req, inputFlags, options.ollama ?? defaultOllama);
+  if (req.model === "codex") return readWithCodex(req, inputFlags, options.spawner ?? defaultSpawner);
   return readWithClaude(req, inputFlags, options.spawner ?? defaultSpawner);
+}
+
+/** Official subscription CLI, isolated from project/user extensions and without command tools. */
+export function codexArgs(schemaFile: string, outputFile: string): string[] {
+  return ["exec", "--ignore-user-config", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only",
+    "--json", "--color", "never", "--output-schema", schemaFile, "--output-last-message", outputFile,
+    "-c", "features.shell_tool=false", "-c", "features.multi_agent=false", "-c", "features.plugins=false",
+    "-c", "features.remote_plugin=false", "-c", "features.hooks=false", "-c", "features.memories=false",
+    "-c", "features.js_repl=false", "-c", "tools.view_image=false", "-c", "tools.web_search=false",
+    "-c", 'web_search="disabled"', "-c", "mcp_servers={}", "-c", "project_doc_max_bytes=0", "-"];
+}
+
+async function readWithCodex(req: ReaderRequest, inputFlags: Flag[], spawner: Spawner): Promise<ReaderResult> {
+  const dir = mkdtempSync(join(tmpdir(), "facility-codex-"));
+  try {
+    const schema = join(dir, "schema.json");
+    const outputFile = join(dir, "answer.json");
+    writeFileSync(schema, JSON.stringify(req.schema), { mode: 0o600 });
+    const bundled = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex";
+    const command = process.env.FACILITY_CODEX_COMMAND || (existsSync(bundled) ? bundled : "codex");
+    const result = await spawner(command, codexArgs(schema, outputFile), {
+      cwd: dir, env: readerEnv(process.env), timeoutMs: req.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      input: `${READER_RULES}\n${req.instructions}\n\n${fenceUntrusted(req.source, req.untrusted)}`,
+    });
+    if (result.code !== 0) return fail(`Codex is unavailable. ${readerError(result.stderr || result.stdout)}`, inputFlags);
+    let output: unknown;
+    try { output = JSON.parse(readFileSync(outputFile, "utf8")); }
+    catch { return fail("Codex did not return a structured answer. Check the official app connection.", inputFlags); }
+    const problem = validate(output, req.schema);
+    return problem ? fail(`Codex answer: ${problem}`, inputFlags) : { ok: true, output, inputFlags, costUsd: 0 };
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+export function readerError(raw: string) {
+  const parsed = tryParse(raw) as { error?: string | { message?: string }; result?: string; errors?: string[] } | undefined;
+  const text = typeof parsed?.error === "string" ? parsed.error : typeof parsed?.error === "object" ? parsed.error.message
+    : parsed?.result || parsed?.errors?.join(" ") || (raw.startsWith("{") ? "The provider stopped before returning a valid answer." : raw);
+  return (text || "Check the provider's sign-in and usage availability.").replace(/\b(?:sk-[\w-]+|Bearer\s+\S+)/gi, "[redacted]").slice(0, 240);
 }
 
 async function readWithClaude(req: ReaderRequest, inputFlags: Flag[], spawner: Spawner): Promise<ReaderResult> {
@@ -176,14 +215,14 @@ async function readWithClaude(req: ReaderRequest, inputFlags: Flag[], spawner: S
       input: fenceUntrusted(req.source, req.untrusted),
       timeoutMs: req.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     });
-    if (code !== 0) return fail(`Claude Code exited with ${code}: ${(stderr || stdout).trim().slice(0, 300)}`, inputFlags);
     let parsed: { is_error?: boolean; structured_output?: unknown; result?: unknown; total_cost_usd?: number };
     try {
       parsed = JSON.parse(stdout);
     } catch {
-      return fail("Claude Code returned something that isn't JSON", inputFlags);
+      return fail(code !== 0 ? `Claude Code exited with ${code}: ${readerError(stderr || stdout)}` : "Claude Code returned something that isn't JSON", inputFlags);
     }
     const costUsd = typeof parsed.total_cost_usd === "number" ? parsed.total_cost_usd : 0;
+    if (code !== 0) return { ...fail(`Claude Code exited with ${code}: ${readerError(stderr || stdout)}`, inputFlags), costUsd };
     if (parsed.is_error) return { ...fail("Claude Code reported an error", inputFlags), costUsd };
     const output = parsed.structured_output ?? tryParse(parsed.result);
     const problem = validate(output, req.schema);
@@ -235,7 +274,7 @@ async function readWithQwen(req: ReaderRequest, inputFlags: Flag[], ollama: Olla
 }
 
 /** Is Ollama answering on this Mac with Qwen downloaded? Used to keep research waiting, not failing, until it is. */
-export async function qwenReady(get: (url: string) => Promise<Response> = (url) => fetch(url, { signal: AbortSignal.timeout(5000) })) {
+export async function qwenReady(get: (url: string) => Promise<Response> = (url) => fetch(url, { redirect: "error", signal: AbortSignal.timeout(5000) })) {
   try {
     const res = await get(`${OLLAMA_URL}/api/tags`);
     if (!res.ok) return false;
@@ -250,6 +289,8 @@ const defaultOllama: OllamaClient = async (path, body, timeoutMs) => {
   try {
     const res = await fetch(`${OLLAMA_URL}${path}`, {
       method: "POST",
+      // A local service must never redirect research text to an external site.
+      redirect: "error",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
@@ -280,6 +321,7 @@ function tryParse(value: unknown) {
  */
 export function validate(value: unknown, schema: Record<string, unknown>, path = "output"): string | null {
   const type = schema.type;
+  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) return `${path} is not an allowed choice`;
   if (type === "object") {
     if (!value || typeof value !== "object" || Array.isArray(value)) return `${path} must be an object`;
     const obj = value as Record<string, unknown>;
@@ -301,12 +343,15 @@ export function validate(value: unknown, schema: Record<string, unknown>, path =
   }
   if (type === "string") {
     if (typeof value !== "string") return `${path} must be text`;
+    if (typeof schema.minLength === "number" && value.length < schema.minLength) return `${path} is too short`;
     if (typeof schema.maxLength === "number" && value.length > schema.maxLength) return `${path} is too long`;
     return null;
   }
   if (type === "number") return typeof value === "number" && Number.isFinite(value) ? null : `${path} must be a number`;
+  if (type === "integer") return typeof value === "number" && Number.isSafeInteger(value) ? null : `${path} must be an integer`;
   if (type === "array") {
     if (!Array.isArray(value)) return `${path} must be a list`;
+    if (typeof schema.minItems === "number" && value.length < schema.minItems) return `${path} has too few items`;
     if (typeof schema.maxItems === "number" && value.length > schema.maxItems) return `${path} has too many items`;
     const items = schema.items as Record<string, unknown> | undefined;
     if (items) {

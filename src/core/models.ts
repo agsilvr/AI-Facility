@@ -33,7 +33,7 @@ export const MODELS: Record<ModelId, Model> = {
   qwen: { name: "Qwen 3.5 9B", where: "on this Mac", sees: ALL, capacity: 1 },
   claude: { name: "Claude", where: "your Claude subscription", sees: ALL },
   deepseek: { name: "DeepSeek", where: "your DeepSeek credits", sees: ["public"], monthlyCapUsd: 5 },
-  codex: { name: "Codex", where: "your ChatGPT subscription", sees: ["public", "shop"], capacity: 1 },
+  codex: { name: "Codex", where: "your ChatGPT subscription", sees: ALL, capacity: 1 },
   typeset: { name: "Type designs", where: "drawn in code on this Mac", sees: ALL },
 };
 
@@ -41,8 +41,8 @@ export const MODELS: Record<ModelId, Model> = {
 export const ROUTES: Record<Job, ModelId[]> = {
   research: ["qwen", "deepseek"],
   design: ["codex", "typeset"],
-  write: ["claude"],
-  brief: ["claude"],
+  write: ["claude", "codex"],
+  brief: ["claude", "codex"],
 };
 
 /** What the router needs to know about right now: who's busy and what's been spent. */

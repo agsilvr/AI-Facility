@@ -1,4 +1,5 @@
 import { P, rect, text, textWidth } from "../pixels";
+import { commandScreen } from "../status";
 import { blink, block, chair, deskScreen, ellipse, glow, hazard, plant, screen, shadow, tiles, type RoomArt, type Spaces } from "./kit";
 
 // The Command Center: the heart of the facility and the biggest room. A
@@ -7,10 +8,10 @@ import { blink, block, chair, deskScreen, ellipse, glow, hazard, plant, screen, 
 // carpet from the door up to the Warden's chair, a briefing table on one side
 // and a hologram map of the facility on the other.
 
-const NAVY = "#18223d";
-const NAVY2 = "#1b2744";
-const BRIDGE = "#202d50";
-const RUNNER = "#1d3566";
+const NAVY = "#9e8764";
+const NAVY2 = "#a88e68";
+const BRIDGE = "#847758";
+const RUNNER = "#74886a";
 
 /** The wall screen, centred over the bridge. */
 function mainScreen(s: Spaces) {
@@ -40,10 +41,10 @@ export const command: RoomArt = {
     for (let x = f.x + 32; x < f.x + f.w; x += 32) rect(ctx, x, f.y, 1, f.h, "rgba(56,189,248,0.08)");
     // The seal of the facility, set in the floor in front of the bridge.
     const ey = f.y + 92;
-    ellipse(ctx, s.cx, ey, 54, 24, "#28406e");
-    ellipse(ctx, s.cx, ey, 51, 22, "#131d36");
-    ellipse(ctx, s.cx, ey, 40, 17, "#223a66");
-    ellipse(ctx, s.cx, ey, 38, 16, "#16233f");
+    ellipse(ctx, s.cx, ey, 54, 24, "#8d9c77");
+    ellipse(ctx, s.cx, ey, 51, 22, "#667c5c");
+    ellipse(ctx, s.cx, ey, 40, 17, "#87966f");
+    ellipse(ctx, s.cx, ey, 38, 16, "#748463");
     for (const dx of [-46, 46]) rect(ctx, s.cx + dx - 2, ey - 1, 4, 3, s.accent);
     // The raised bridge along the back, its front edge lit.
     const top = bridgeTop(s);
@@ -67,9 +68,9 @@ export const command: RoomArt = {
 
   wall(ctx, s) {
     const w = s.wall;
-    rect(ctx, w.x, w.y, w.w, w.h, "#1c2540");
-    for (let x = w.x + 16; x < w.x + w.w; x += 32) rect(ctx, x, w.y + 3, 1, w.h - 5, "#141b30");
-    for (let x = w.x + 8; x < w.x + w.w; x += 32) rect(ctx, x, w.y + 19, 2, 1, "#2e3d66");
+    rect(ctx, w.x, w.y, w.w, w.h, "#8a8e72");
+    for (let x = w.x + 16; x < w.x + w.w; x += 32) rect(ctx, x, w.y + 3, 1, w.h - 5, "#74795e");
+    for (let x = w.x + 8; x < w.x + w.w; x += 32) rect(ctx, x, w.y + 19, 2, 1, "#aaa482");
     // The big screen's bezel; what's on it is drawn live.
     const sc = mainScreen(s);
     rect(ctx, sc.x - 4, sc.y - 2, sc.w + 8, sc.h + 4, "#0a0e1c");
@@ -109,7 +110,7 @@ export const command: RoomArt = {
     s.rl.stations.forEach((st, i) => {
       const w = i === 0 ? 50 : 30;
       const x = st.x - w / 2;
-      block(ctx, x, f.y + 12, w, 8, 6, { top: "#2c3a63", front: "#141c33", edge: "#4c5f96" });
+      block(ctx, x, f.y + 12, w, 8, 6, { top: "#b09a75", front: "#7a6b50", edge: "#c4ae80" });
       const screens = i === 0 ? 3 : 2;
       const sw = i === 0 ? 13 : 11;
       for (let k = 0; k < screens; k++) deskScreen(ctx, x + 3 + k * (sw + 3), f.y + 4, sw, 7, "#081a2c");
@@ -124,18 +125,18 @@ export const command: RoomArt = {
     for (let x = f.x + 8; x < f.x + f.w - 8; x += 1) {
       if (Math.abs(x - s.cx) < 14) continue;
       rect(ctx, x, rail, 1, 1, "#7d8fc0");
-      if ((x - f.x) % 12 === 0) rect(ctx, x, rail, 2, 5, "#4c5f96");
+      if ((x - f.x) % 12 === 0) rect(ctx, x, rail, 2, 5, "#c4ae80");
     }
     for (let i = 0; i < 3; i++) rect(ctx, s.cx - 12, bridgeBottom(s) - 4 + i * 3, 24, 1, "#2f5596");
 
     // Left: the briefing table, where the daily briefing is put together, on a rug.
     const lx = Math.round((s.left.x0 + s.left.x1) / 2);
     const ty = f.y + 82;
-    rect(ctx, lx - 52, ty - 18, 104, 44, "#24305a");
-    rect(ctx, lx - 50, ty - 16, 100, 40, "#2c3b6e");
-    rect(ctx, lx - 50, ty - 16, 100, 1, "#4f6aa8");
-    rect(ctx, lx - 50, ty + 23, 100, 1, "#4f6aa8");
-    for (let i = 0; i < 4; i++) chair(ctx, lx - 33 + i * 22, ty - 12, "#2f4a86");
+    rect(ctx, lx - 52, ty - 18, 104, 44, "#8b9672");
+    rect(ctx, lx - 50, ty - 16, 100, 40, "#a8b18a");
+    rect(ctx, lx - 50, ty - 16, 100, 1, "#c8d0a6");
+    rect(ctx, lx - 50, ty + 23, 100, 1, "#c8d0a6");
+    for (let i = 0; i < 4; i++) chair(ctx, lx - 33 + i * 22, ty - 12, "#84956c");
     shadow(ctx, lx - 42, ty + 16, 84, 3);
     ellipse(ctx, lx, ty + 6, 44, 11, P.ink);
     ellipse(ctx, lx, ty + 6, 43, 10, "#3b2a1f");
@@ -145,7 +146,7 @@ export const command: RoomArt = {
       rect(ctx, lx - 30 + i * 18, ty + 1, 7, 5, P.paper);
       rect(ctx, lx - 29 + i * 18, ty + 2, 4, 1, P.grey);
     }
-    for (let i = 0; i < 4; i++) chair(ctx, lx - 33 + i * 22, ty + 16, "#2f4a86");
+    for (let i = 0; i < 4; i++) chair(ctx, lx - 33 + i * 22, ty + 16, "#84956c");
 
     // Right: the hologram table. The map of the facility over it is drawn live.
     const hx = Math.round((s.right.x0 + s.right.x1) / 2);
@@ -178,13 +179,10 @@ export const command: RoomArt = {
     rect(ctx, sc.x, sc.y, sc.w, sc.h, P.screen);
     // Left of the screen: what's waiting for the owner.
     const third = Math.floor(sc.w / 3);
-    if (f.pending) {
-      text(ctx, "NEEDS YOU", sc.x + 4, sc.y + 2, blink(f.time, 4) ? P.red : P.orange);
-      text(ctx, `${f.pending} TO APPROVE`, sc.x + 4, sc.y + 10, P.white);
-    } else {
-      text(ctx, "ALL CLEAR", sc.x + 4, sc.y + 2, P.green);
-      text(ctx, "NOTHING WAITS", sc.x + 4, sc.y + 10, P.grey);
-    }
+    const status = commandScreen(f.state);
+    const color = status.tone === "blocked" ? P.red : ["review", "paused", "waiting"].includes(status.tone) ? P.yellow : P.green;
+    text(ctx, status.headline, sc.x + 4, sc.y + 2, color);
+    text(ctx, status.detail, sc.x + 4, sc.y + 10, P.white);
     rect(ctx, sc.x + third, sc.y + 2, 1, sc.h - 4, "#1c3550");
     // Middle: each crew member's colour and how far through their task they are.
     const crew = f.state.agents;

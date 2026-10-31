@@ -45,7 +45,7 @@ export const studio: RoomArt = {
     }
     // A big round rug in rings of colour, in the middle of the room.
     const ry = f.y + 72;
-    const rings = ["#e85d75", "#f6a33b", "#f7d94c", "#4cc38a", "#3f8fd8", "#8c5bd6"];
+    const rings = ["#b98375", "#d0ac75", "#ded09a", "#9aaa7a", "#8aa6a6", "#a193ab"];
     rings.forEach((c, i) => ellipse(ctx, s.cx, ry, 40 - i * 6, 14 - i * 2, c));
     // Splashes of paint.
     for (let i = 0; i < 9; i++) {

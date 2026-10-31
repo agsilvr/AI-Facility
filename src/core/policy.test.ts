@@ -16,7 +16,7 @@ describe("workflow policy", () => {
 
   it("puts every outward action behind an approval", () => {
     const actions = wings.flatMap((w) => w.workflows.flatMap((wf) => wf.stages.filter((s) => s.action)));
-    expect(actions.map((s) => s.action).sort()).toEqual(["etsy.publishListing", "etsy.sendReply"]);
+    expect(actions.map((s) => s.action).sort()).toEqual(["etsy.publishListing", "etsy.sendReply", "internal.acceptArtwork"]);
   });
 
   it("refuses an action with no approval before it", () => {
@@ -40,6 +40,14 @@ describe("workflow policy", () => {
       wingWith([{ ...work("review"), needsApproval: true }, { ...work("send"), needsApproval: true, action: "etsy.sendReply" }]),
     );
     expect(problems.join()).toContain("can't also be an approval stage");
+  });
+
+  it("refuses to combine AI drafting with an action", () => {
+    const problems = workflowViolations(wingWith([
+      { ...work("draft"), needsApproval: true },
+      { ...work("send"), action: "etsy.sendReply" },
+    ]));
+    expect(problems.join()).toContain("an action stage cannot also be an AI stage");
   });
 
   it("refuses to start with an unsafe workflow", () => {
