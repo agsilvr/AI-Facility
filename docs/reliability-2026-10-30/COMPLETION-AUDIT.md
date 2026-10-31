@@ -1,6 +1,6 @@
 # Requirement evidence — 30 October 2026
 
-This is a completion audit of the reliability maintenance objective, not certification of an unattended shop or a profit forecast. Remote review is still pending owner authorization. The previous goal turn made progress by installing and verifying repairs; this continuation made further progress by reproducing and repairing additional research defects and reconciling contradictory operating documents.
+This is a completion audit of the reliability maintenance objective, not certification of an unattended shop or a profit forecast. The owner authorized source publication and completed the official GitHub CLI sign-in. The verified branch is published for review in [draft PR #11](https://github.com/agsilvr/AI-Facility/pull/11). The earlier export-permission blocker is resolved; no further permission question is needed for this review.
 
 | Requirement | Current evidence inspected | Result and boundary |
 | --- | --- | --- |
@@ -13,12 +13,12 @@ This is a completion audit of the reliability maintenance objective, not certifi
 | Design quality and feedback discipline | Owner's DESIGN-QUALITY manual, PNG and artwork tests, revision and paused-upload tests | Alpha/visible bounds, immutable files, retained revision feedback, three-attempt limit and paused-upload rejection implemented. Full creative review, exact supplier placement/variants and physical production remain separate unverified gates. No artwork generated in maintenance. |
 | Preserve paused product and data | Before/after API snapshots at follow-up installation; `followup-readback.json` | Global production and automatic products remain false. Entire `first-listing` record and all internal tasks compare exactly equal. Unpublished Printify shell `6ae53368aaf23a205705feee` retained; no product or publication write performed. |
 | Verify the repaired implementation | 343 tests / 34 files, typecheck, production build, whitespace check; installation SHA-256 manifest | All passed. The served HTML matches the tested build. Code installed with a rollback backup; no runtime DB, PIN, secret or service configuration edited directly. Tests are evidence for covered contracts, not proof that all future bugs are impossible. |
-| Deliver for repository review | Local `codex/automation-reliability`; no approved source export | Incomplete. Automatic approval review rejected the GitHub push because the source payload/destination lacked explicit authorization. No alternate upload was attempted. Push and draft PR require the pending owner permission. |
+| Deliver for repository review | Published `codex/automation-reliability`, draft PR #11, head SHA verified against the local branch | Source export and draft review delivered after explicit owner authorization. GitHub CLI authentication was completed by the owner; the Codex connector can read but returned 403 on code and PR writes. Use the authenticated official CLI for these writes. Main is not merged automatically. |
 
 ## Remaining operational blockers and next step
 
 Unattended official-subscription image generation, supplier product/variant quotes and mockups, an exact version-bound product review/cost package, verified Etsy publishing/reconciliation, and orders/accounting are still unbuilt or unverified. Their absence is visible in Command and detailed in `AUDIT.md` and `OPERATING-PLAN.md`. These are not represented as active connections or completed production.
 
-Next review action: obtain explicit authorization to push source and documentation on `codex/automation-reliability` to `agsilvr/AI-Facility` and open a draft PR. Do not merge main automatically. The source-review permission does not resume production.
+Next review action: inspect draft PR #11 and its CI results. Continue authorized review corrections on the same branch. Do not repeat the resolved source-export permission request or merge main automatically. The source-review permission does not resume production.
 
 Next product action, only after explicit production resume: reread `first-listing` and the design manual, verify the exact existing supplier product, variants, print area and cost package, then save the brief and continue that same draft shell. The owner must not transfer context between chats.

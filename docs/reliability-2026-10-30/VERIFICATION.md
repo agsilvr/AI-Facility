@@ -10,7 +10,7 @@
 
 Installation and final live readback are recorded in `install-manifest.json` and the shared `facility-reliability` work record once completed. Owner production remains paused throughout.
 
-The GitHub push was rejected by automatic approval review because exporting the source payload to the remote was not explicitly authorized. Changes remain local; remote publication and a pull request are pending explicit owner authorization. No push or alternate upload path was attempted after that rejection.
+The initial GitHub push was rejected by automatic approval review because exporting the source payload to the remote was not explicitly authorized. The owner subsequently authorized that export and completed official GitHub CLI sign-in. The branch was then pushed successfully and [draft PR #11](https://github.com/agsilvr/AI-Facility/pull/11) created. The earlier permission blocker is resolved.
 
 ## Installed readback
 
@@ -20,7 +20,7 @@ Live API readback: mode live; production running false; automatic products false
 
 Installed Safari UI also checked at narrow width. Profit scenario controls were exercised with explicit test assumptions: $50 collected, $20 production, $8 shipping, 10% fees, $1 fixed fee, $3 acquisition, $1 return provision, $2 labor and $500 overhead. The visible result correctly shows $10 contribution, 1,050 required monthly orders and $52,500 collected revenue. The page is reloaded afterward to clear these unsaved test assumptions. This is arithmetic verification, not a prediction for the shop.
 
-Local implementation commit: `0d268fc`, branch `codex/automation-reliability`. Remote push and PR remain pending explicit approval after automatic approval review rejected the export. No alternate upload was attempted.
+Initial implementation commit: `0d268fc`, followed by verification commit `ba7f259` and research follow-up `5307cee`, on `codex/automation-reliability`. The same branch and original commits are now published in draft PR #11; no source snapshot rewrite was needed.
 
 ## Continuation verification — 30 October, 9:56 PM America/New_York
 
@@ -29,3 +29,7 @@ Four new regression cases failed against the prior implementation and passed aft
 An initial full test invocation inside the restricted sandbox could not open a loopback listener (`EPERM`) and stalled its HTTP fixtures. Its exact process handles were inspected and terminated. The complete suite then passed with local loopback permission; the failed environment invocation is not counted as a passing test.
 
 The follow-up also reconciles README, DESIGN, DARK-UX and RESEARCH-ACCESS with the actual schedule, code briefings, connection labels and navigation. Installation readback and completion boundaries are recorded in `COMPLETION-AUDIT.md`.
+
+## Authorized repository review
+
+The GitHub connector confirmed repository access but rejected tree creation and PR creation with `403 Resource not accessible by integration`. Neither operation succeeded through that connector. The owner completed the official GitHub CLI browser authorization; normal Git then pushed the original verified commits and `gh pr create` opened draft PR #11. No credentials were extracted or copied into the facility, source files or handoff. The final review URL and CI conclusion are retained in the shared `facility-reliability` record; the PR's Checks tab is the live source of CI status.

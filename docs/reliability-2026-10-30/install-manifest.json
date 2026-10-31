@@ -84,7 +84,7 @@
     },
     {
       "path": "docs/reliability-2026-10-30/COMPLETION-AUDIT.md",
-      "sha256": "21421e72c28e235297766b90c18aa66bdbb5feb770164bf6bf4bdffbed9b27b8"
+      "sha256": "12825ea20a6885577d19ee807ce7bc95bf236b9cace06029eb4683156d686498"
     },
     {
       "path": "docs/reliability-2026-10-30/OPERATING-PLAN.md",
@@ -92,7 +92,7 @@
     },
     {
       "path": "docs/reliability-2026-10-30/VERIFICATION.md",
-      "sha256": "b2e1c3a4c33b4486bf8ecf5d8bcf4ffa1d1f8d4b8b3896571b4bf05fd46ebc04"
+      "sha256": "4ed7dbf79c407d83b2078e505eaacd39a14014c7a430ec625ce400d00ca47a4e"
     },
     {
       "path": "docs/reliability-2026-10-30/followup-readback.json",
