@@ -77,7 +77,9 @@ export function listingRequest(idea: Idea, shop: string): ReaderRequest {
     instructions: [
       `The shop: ${shop}`,
       "Write the Etsy listing for the product described in the outside text, which is a draft from another model.",
-      "Title up to 140 characters; a warm, honest description that says the design was made with AI assistance and finished by the shop;",
+      "Title up to 140 characters; a warm, honest description that says the design was made with AI assistance and finished by the shop,",
+      // Etsy wants buyers told who makes the item; the listing's production partner field is set when it's published.
+      "and that the item is printed to order and shipped by the shop's print partner;",
       "up to 13 tags of at most 20 characters; and a fair price in US dollars for this kind of print-on-demand item.",
       "No links, emails, phone numbers, discounts or mentions of paying outside Etsy.",
     ].join("\n"),
