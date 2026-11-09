@@ -30,6 +30,11 @@ here is enforced by code and covered by tests; the tests are named so they read 
    commands run in the macOS sandbox with network limited to GitHub and npm. Deny rules on
    commands can be worked around by a determined model, which is why the sandbox, not the
    rule list, is the real wall. `server/lockdown.test.ts` fails if anyone loosens the file.
+   Codex is fenced by `.codex/config.toml` (it loads once the owner trusts the folder):
+   commands write only inside the folder, have no network and see no keys, and anything more
+   waits for the owner's yes. Its sandbox can't hide `./data` from reads the way Claude's
+   does, so `AGENTS.md` forbids reading it. Set the PIN before first opening the folder in
+   Codex, since the one-time setup code sits in `./data` until then.
 5. **AI that works inside the facility** is split in two:
    - **Readers** turn outside text into a draft. They run Claude Code with every tool removed,
      no MCP servers, no settings, hooks, plugins or memory (`--safe-mode`), in an empty

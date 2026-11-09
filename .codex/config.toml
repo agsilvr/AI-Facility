@@ -1,0 +1,16 @@
+# Codex's fence for this folder: the twin of .claude/settings.json.
+# Codex only loads it once the owner marks the folder as trusted.
+# server/lockdown.test.ts fails if anyone loosens it.
+
+# Commands may change files in this folder and nowhere else.
+sandbox_mode = "workspace-write"
+# Anything beyond that (network, files elsewhere) waits for the owner to say yes.
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+# Nothing leaves the Mac from Codex's commands without asking first.
+network_access = false
+
+[shell_environment_policy]
+# Commands see only the basics (HOME, PATH, USER and the like), never keys or tokens.
+inherit = "core"
